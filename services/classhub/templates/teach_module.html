@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Teacher · {{ module.title }}</title>
+    <style>
+      body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; max-width:1100px; margin:40px auto; padding:0 16px;}
+      .top{display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap;}
+      .muted{color:#666; font-size:14px;}
+      .pill{display:inline-block; padding:4px 10px; border:1px solid #aaa; border-radius:999px; font-size:12px;}
+      .card{border:1px solid #ddd; border-radius:14px; padding:16px; margin-top:16px;}
+      .row{display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;}
+      button{padding:10px 14px; font-size:15px; border-radius:10px; border:1px solid #333; background:#fff; cursor:pointer;}
+      input, textarea, select{width:100%; padding:10px; border-radius:10px; border:1px solid #ccc; font-size:15px;}
+      textarea{min-height:90px;}
+      a{color:inherit;}
+      .mat{border:1px solid #eee; border-radius:14px; padding:14px; margin-top:12px; background:#fafafa;}
+      .btnline form{display:inline-block; margin:0 6px 0 0;}
+      .btnline button{padding:8px 10px; font-size:13px; border-radius:10px;}
+      pre{white-space:pre-wrap;}
+      details{border:1px solid #eee; border-radius:14px; padding:12px; margin-top:12px;}
+      summary{cursor:pointer; font-weight:600;}
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <div>
+        <div class="muted"><a href="/teach">Teacher</a> · <a href="/teach/class/{{ classroom.id }}">{{ classroom.name }}</a></div>
+        <h1 style="margin:6px 0 0 0">{{ module.title }}</h1>
+      </div>
+      <div class="muted">Join code <span class="pill">{{ classroom.join_code }}</span></div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <h2 style="margin:0">Materials</h2>
+        <div class="muted">Students see these in order.</div>
+      </div>
+
+      {% if materials %}
+        {% for mat in materials %}
+          <div class="mat">
+            <div class="row">
+              <div>
+                <strong>{{ mat.title }}</strong>
+                <div class="muted" style="font-size:13px">Type: {{ mat.type }}</div>
+              </div>
+              <div class="btnline">
+                <form method="post" action="/teach/module/{{ module.id }}/move-material">
+                  {% csrf_token %}
+                  <input type="hidden" name="material_id" value="{{ mat.id }}" />
+                  <input type="hidden" name="direction" value="up" />
+                  <button type="submit">↑</button>
+                </form>
+                <form method="post" action="/teach/module/{{ module.id }}/move-material">
+                  {% csrf_token %}
+                  <input type="hidden" name="material_id" value="{{ mat.id }}" />
+                  <input type="hidden" name="direction" value="down" />
+                  <button type="submit">↓</button>
+                </form>
+                {% if mat.type == 'upload' %}
+                  <a href="/teach/material/{{ mat.id }}/submissions">Submissions</a>
+                {% endif %}
+              </div>
+            </div>
+
+            {% if mat.type == 'link' and mat.url %}
+              <div class="muted" style="margin-top:8px"><a href="{{ mat.url }}" target="_blank" rel="noopener">{{ mat.url }}</a></div>
+            {% elif mat.type == 'text' and mat.body %}
+              <pre class="muted" style="margin-top:10px">{{ mat.body|truncatechars:800 }}</pre>
+            {% elif mat.type == 'upload' %}
+              <div class="muted" style="margin-top:8px">Accepted: {{ mat.accepted_extensions|default:'.sb3' }} · Max {{ mat.max_upload_mb }}MB</div>
+            {% else %}
+              <div class="muted" style="margin-top:8px">(Empty details)</div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      {% else %}
+        <p class="muted" style="margin-top:12px">No materials yet.</p>
+      {% endif %}
+
+      <details>
+        <summary>Add a link</summary>
+        <form method="post" action="/teach/module/{{ module.id }}/add-material" style="margin-top:10px; max-width:760px">
+          {% csrf_token %}
+          <input type="hidden" name="type" value="link" />
+          <label class="muted">Title</label>
+          <input name="title" placeholder="e.g., Open lesson" />
+          <label class="muted" style="display:block; margin-top:10px">URL</label>
+          <input name="url" placeholder="https://…" />
+          <button type="submit" style="margin-top:12px">Add link</button>
+        </form>
+      </details>
+
+      <details>
+        <summary>Add a text block</summary>
+        <form method="post" action="/teach/module/{{ module.id }}/add-material" style="margin-top:10px; max-width:760px">
+          {% csrf_token %}
+          <input type="hidden" name="type" value="text" />
+          <label class="muted">Title</label>
+          <input name="title" placeholder="e.g., Today at a glance" />
+          <label class="muted" style="display:block; margin-top:10px">Body</label>
+          <textarea name="body" placeholder="Short instructions, reminders, links, etc."></textarea>
+          <button type="submit" style="margin-top:12px">Add text</button>
+        </form>
+      </details>
+
+      <details open>
+        <summary>Add an upload dropbox</summary>
+        <form method="post" action="/teach/module/{{ module.id }}/add-material" style="margin-top:10px; max-width:760px">
+          {% csrf_token %}
+          <input type="hidden" name="type" value="upload" />
+          <label class="muted">Title</label>
+          <input name="title" value="Upload your project file" />
+          <div class="row" style="margin-top:10px">
+            <div style="min-width:240px; flex:1">
+              <label class="muted">Accepted extensions</label>
+              <input name="accepted_extensions" value=".sb3" />
+            </div>
+            <div style="min-width:180px">
+              <label class="muted">Max upload (MB)</label>
+              <input name="max_upload_mb" value="50" />
+            </div>
+          </div>
+          <button type="submit" style="margin-top:12px">Add dropbox</button>
+        </form>
+      </details>
+
+    </div>
+  </body>
+</html>

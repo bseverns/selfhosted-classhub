@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Teacher · Class Hub</title>
+    <style>
+      body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; max-width:1000px; margin:40px auto; padding:0 16px;}
+      .top{display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap;}
+      .muted{color:#666; font-size:14px;}
+      .card{border:1px solid #ddd; border-radius:14px; padding:16px; margin-top:16px;}
+      .row{display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;}
+      .pill{display:inline-block; padding:4px 10px; border:1px solid #aaa; border-radius:999px; font-size:12px;}
+      input, textarea{width:100%; padding:10px; border-radius:10px; border:1px solid #ccc; font-size:15px;}
+      button{padding:10px 14px; font-size:15px; border-radius:10px; border:1px solid #333; background:#fff; cursor:pointer;}
+      a{color:inherit;}
+      table{width:100%; border-collapse:collapse;}
+      th, td{padding:10px; border-bottom:1px solid #eee; text-align:left; vertical-align:top;}
+      th{font-size:13px; color:#666; font-weight:600;}
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <div>
+        <h1 style="margin:0">Teacher</h1>
+        <div class="muted">Staff-only cockpit · <a href="/admin/">Admin</a> · <a href="/">Student join page</a></div>
+      </div>
+      <div class="muted">Signed in as <strong>{{ request.user.username }}</strong></div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0 0 10px 0">Create a class</h2>
+      <form method="post" action="/teach/create-class">
+        {% csrf_token %}
+        <div style="max-width:520px">
+          <label class="muted">Class name</label>
+          <input name="name" placeholder="e.g., Piper + Scratch (Period 3)" />
+        </div>
+        <button type="submit" style="margin-top:12px">Create</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <h2 style="margin:0">Classes</h2>
+        <div class="muted">Tip: keep codes on the projector, not in email.</div>
+      </div>
+
+      {% if classes %}
+        <table>
+          <thead>
+            <tr>
+              <th>Class</th>
+              <th>Join code</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in classes %}
+              <tr>
+                <td><strong>{{ c.name }}</strong></td>
+                <td><span class="pill">{{ c.join_code }}</span></td>
+                <td class="muted">{% if c.is_locked %}Locked{% else %}Open{% endif %}</td>
+                <td><a href="/teach/class/{{ c.id }}">Open</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="muted">No classes yet.</p>
+      {% endif %}
+    </div>
+  </body>
+</html>

@@ -1,4 +1,7 @@
 import json
+import re
+import tempfile
+import zipfile
 from pathlib import Path
 from django.http import FileResponse, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
@@ -6,13 +9,15 @@ from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.middleware.csrf import get_token
 from django.conf import settings
+from django.contrib.admin.views.decorators import staff_member_required
+from django.db import models
 
 import yaml
 import markdown as md
 import bleach
 
 from .forms import SubmissionUploadForm
-from .models import Class, Material, StudentIdentity, Submission
+from .models import Class, Module, Material, StudentIdentity, Submission, gen_class_code
 
 
 # --- Repo-authored course content (markdown) ---------------------------------
@@ -342,5 +347,343 @@ def course_lesson(request, course_slug: str, lesson_slug: str):
             "lesson_html": html,
             "prev": prev_l,
             "next": next_l,
+        },
+    )
+
+
+# --- Teacher cockpit (staff-only UI) ----------------------------------------
+
+
+def _normalize_order(qs, field: str = "order_index"):
+    """Normalize order_index values to 0..N-1 in current QS order."""
+    for i, obj in enumerate(qs):
+        if getattr(obj, field) != i:
+            setattr(obj, field, i)
+            obj.save(update_fields=[field])
+
+
+@staff_member_required
+def teach_home(request):
+    """Teacher landing page (outside /admin)."""
+    classes = Class.objects.all().order_by("name", "id")
+    return render(request, "teach_home.html", {"classes": classes})
+
+
+@staff_member_required
+@require_POST
+def teach_create_class(request):
+    name = (request.POST.get("name") or "").strip()[:200]
+    if not name:
+        return redirect("/teach")
+
+    # join_code must be unique
+    join_code = gen_class_code()
+    for _ in range(10):
+        if not Class.objects.filter(join_code=join_code).exists():
+            break
+        join_code = gen_class_code()
+
+    Class.objects.create(name=name, join_code=join_code)
+    return redirect("/teach")
+
+
+@staff_member_required
+def teach_class_dashboard(request, class_id: int):
+    classroom = Class.objects.filter(id=class_id).first()
+    if not classroom:
+        return HttpResponse("Not found", status=404)
+
+    modules = classroom.modules.prefetch_related("materials").all()
+    # normalize module order occasionally (cheap, safe)
+    _normalize_order(list(modules))
+    modules = classroom.modules.prefetch_related("materials").all()
+
+    # Count submissions per upload material (latest only, by student)
+    upload_material_ids = []
+    for m in modules:
+        for mat in m.materials.all():
+            if mat.type == Material.TYPE_UPLOAD:
+                upload_material_ids.append(mat.id)
+
+    submission_counts = {}
+    if upload_material_ids:
+        qs = (
+            Submission.objects.filter(material_id__in=upload_material_ids)
+            .values("material_id", "student_id")
+            .distinct()
+        )
+        for row in qs:
+            submission_counts[row["material_id"]] = submission_counts.get(row["material_id"], 0) + 1
+
+    student_count = classroom.students.count()
+
+    return render(
+        request,
+        "teach_class.html",
+        {
+            "classroom": classroom,
+            "modules": modules,
+            "student_count": student_count,
+            "submission_counts": submission_counts,
+        },
+    )
+
+
+@staff_member_required
+@require_POST
+def teach_toggle_lock(request, class_id: int):
+    classroom = Class.objects.filter(id=class_id).first()
+    if not classroom:
+        return HttpResponse("Not found", status=404)
+    classroom.is_locked = not classroom.is_locked
+    classroom.save(update_fields=["is_locked"])
+    return redirect(f"/teach/class/{classroom.id}")
+
+
+@staff_member_required
+@require_POST
+def teach_rotate_code(request, class_id: int):
+    classroom = Class.objects.filter(id=class_id).first()
+    if not classroom:
+        return HttpResponse("Not found", status=404)
+
+    join_code = gen_class_code()
+    for _ in range(10):
+        if not Class.objects.filter(join_code=join_code).exists():
+            break
+        join_code = gen_class_code()
+
+    classroom.join_code = join_code
+    classroom.save(update_fields=["join_code"])
+    return redirect(f"/teach/class/{classroom.id}")
+
+
+@staff_member_required
+@require_POST
+def teach_add_module(request, class_id: int):
+    classroom = Class.objects.filter(id=class_id).first()
+    if not classroom:
+        return HttpResponse("Not found", status=404)
+
+    title = (request.POST.get("title") or "").strip()[:200]
+    if not title:
+        return redirect(f"/teach/class/{class_id}")
+
+    max_idx = classroom.modules.aggregate(models.Max("order_index")).get("order_index__max")
+    order_index = int(max_idx) + 1 if max_idx is not None else 0
+
+    mod = Module.objects.create(classroom=classroom, title=title, order_index=order_index)
+    return redirect(f"/teach/module/{mod.id}")
+
+
+@staff_member_required
+@require_POST
+def teach_move_module(request, class_id: int):
+    classroom = Class.objects.filter(id=class_id).first()
+    if not classroom:
+        return HttpResponse("Not found", status=404)
+
+    module_id = int(request.POST.get("module_id") or 0)
+    direction = (request.POST.get("direction") or "").strip()
+
+    modules = list(classroom.modules.all())
+    modules.sort(key=lambda m: (m.order_index, m.id))
+
+    idx = next((i for i, m in enumerate(modules) if m.id == module_id), None)
+    if idx is None:
+        return redirect(f"/teach/class/{class_id}")
+
+    if direction == "up" and idx > 0:
+        modules[idx - 1], modules[idx] = modules[idx], modules[idx - 1]
+    elif direction == "down" and idx < len(modules) - 1:
+        modules[idx + 1], modules[idx] = modules[idx], modules[idx + 1]
+
+    for i, m in enumerate(modules):
+        if m.order_index != i:
+            m.order_index = i
+            m.save(update_fields=["order_index"])
+
+    return redirect(f"/teach/class/{class_id}")
+
+
+@staff_member_required
+def teach_module(request, module_id: int):
+    module = Module.objects.select_related("classroom").prefetch_related("materials").filter(id=module_id).first()
+    if not module:
+        return HttpResponse("Not found", status=404)
+
+    mats = list(module.materials.all())
+    mats.sort(key=lambda m: (m.order_index, m.id))
+    _normalize_order(mats)
+    mats = list(module.materials.all())
+
+    return render(
+        request,
+        "teach_module.html",
+        {
+            "classroom": module.classroom,
+            "module": module,
+            "materials": mats,
+        },
+    )
+
+
+@staff_member_required
+@require_POST
+def teach_add_material(request, module_id: int):
+    module = Module.objects.select_related("classroom").filter(id=module_id).first()
+    if not module:
+        return HttpResponse("Not found", status=404)
+
+    mtype = (request.POST.get("type") or Material.TYPE_LINK).strip()
+    title = (request.POST.get("title") or "").strip()[:200]
+    if not title:
+        return redirect(f"/teach/module/{module_id}")
+
+    max_idx = module.materials.aggregate(models.Max("order_index")).get("order_index__max")
+    order_index = int(max_idx) + 1 if max_idx is not None else 0
+
+    mat = Material.objects.create(module=module, title=title, type=mtype, order_index=order_index)
+
+    if mtype == Material.TYPE_LINK:
+        mat.url = (request.POST.get("url") or "").strip()
+        mat.save(update_fields=["url"])
+    elif mtype == Material.TYPE_TEXT:
+        mat.body = (request.POST.get("body") or "").strip()
+        mat.save(update_fields=["body"])
+    elif mtype == Material.TYPE_UPLOAD:
+        mat.accepted_extensions = (request.POST.get("accepted_extensions") or ".sb3").strip()
+        try:
+            mat.max_upload_mb = int(request.POST.get("max_upload_mb") or 50)
+        except Exception:
+            mat.max_upload_mb = 50
+        mat.save(update_fields=["accepted_extensions", "max_upload_mb"])
+
+    return redirect(f"/teach/module/{module_id}")
+
+
+@staff_member_required
+@require_POST
+def teach_move_material(request, module_id: int):
+    module = Module.objects.filter(id=module_id).first()
+    if not module:
+        return HttpResponse("Not found", status=404)
+
+    material_id = int(request.POST.get("material_id") or 0)
+    direction = (request.POST.get("direction") or "").strip()
+
+    mats = list(module.materials.all())
+    mats.sort(key=lambda m: (m.order_index, m.id))
+
+    idx = next((i for i, m in enumerate(mats) if m.id == material_id), None)
+    if idx is None:
+        return redirect(f"/teach/module/{module_id}")
+
+    if direction == "up" and idx > 0:
+        mats[idx - 1], mats[idx] = mats[idx], mats[idx - 1]
+    elif direction == "down" and idx < len(mats) - 1:
+        mats[idx + 1], mats[idx] = mats[idx], mats[idx + 1]
+
+    for i, m in enumerate(mats):
+        if m.order_index != i:
+            m.order_index = i
+            m.save(update_fields=["order_index"])
+
+    return redirect(f"/teach/module/{module_id}")
+
+
+def _safe_filename(s: str) -> str:
+    s = (s or "file").strip()
+    s = re.sub(r"[^A-Za-z0-9._-]+", "_", s)
+    s = s.strip("._")
+    return s or "file"
+
+
+@staff_member_required
+def teach_material_submissions(request, material_id: int):
+    material = (
+        Material.objects.select_related("module__classroom")
+        .filter(id=material_id)
+        .first()
+    )
+    if not material or material.type != Material.TYPE_UPLOAD:
+        return HttpResponse("Not found", status=404)
+
+    classroom = material.module.classroom
+    students = list(classroom.students.all().order_by("created_at", "id"))
+
+    all_subs = list(
+        Submission.objects.filter(material=material)
+        .select_related("student")
+        .order_by("-uploaded_at", "-id")
+    )
+
+    latest_by_student = {}
+    count_by_student = {}
+    for s in all_subs:
+        sid = s.student_id
+        count_by_student[sid] = count_by_student.get(sid, 0) + 1
+        if sid not in latest_by_student:
+            latest_by_student[sid] = s
+
+    show = (request.GET.get("show") or "all").strip()
+
+    if request.GET.get("download") == "zip_latest":
+        # Build a zip of latest submissions for each student.
+        tmp = tempfile.NamedTemporaryFile(prefix="classhub_latest_", suffix=".zip", delete=False)
+        tmp_path = tmp.name
+        tmp.close()
+
+        with zipfile.ZipFile(tmp_path, "w", compression=zipfile.ZIP_DEFLATED) as z:
+            for st in students:
+                s = latest_by_student.get(st.id)
+                if not s:
+                    continue
+                try:
+                    src_path = s.file.path
+                except Exception:
+                    continue
+                base_name = _safe_filename(st.display_name)
+                orig = _safe_filename(s.original_filename or Path(s.file.name).name)
+                arc = f"{base_name}/{orig}"
+                try:
+                    z.write(src_path, arcname=arc)
+                except Exception:
+                    continue
+
+        download_name = f"{_safe_filename(classroom.name)}_material_{material.id}_latest.zip"
+        return FileResponse(open(tmp_path, "rb"), as_attachment=True, filename=download_name)
+
+    rows = []
+    missing = 0
+    for st in students:
+        latest = latest_by_student.get(st.id)
+        c = count_by_student.get(st.id, 0)
+        if not latest:
+            missing += 1
+        rows.append(
+            {
+                "student": st,
+                "latest": latest,
+                "count": c,
+            }
+        )
+
+    if show == "missing":
+        rows = [r for r in rows if r["latest"] is None]
+    elif show == "submitted":
+        rows = [r for r in rows if r["latest"] is not None]
+
+    return render(
+        request,
+        "teach_material_submissions.html",
+        {
+            "classroom": classroom,
+            "module": material.module,
+            "material": material,
+            "rows": rows,
+            "missing": missing,
+            "student_count": len(students),
+            "show": show,
         },
     )

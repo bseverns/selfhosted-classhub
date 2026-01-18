@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Teacher · {{ classroom.name }}</title>
+    <style>
+      body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; max-width:1100px; margin:40px auto; padding:0 16px;}
+      .top{display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap;}
+      .muted{color:#666; font-size:14px;}
+      .pill{display:inline-block; padding:4px 10px; border:1px solid #aaa; border-radius:999px; font-size:12px;}
+      .card{border:1px solid #ddd; border-radius:14px; padding:16px; margin-top:16px;}
+      .row{display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;}
+      button{padding:10px 14px; font-size:15px; border-radius:10px; border:1px solid #333; background:#fff; cursor:pointer;}
+      input{width:100%; padding:10px; border-radius:10px; border:1px solid #ccc; font-size:15px;}
+      a{color:inherit;}
+      table{width:100%; border-collapse:collapse;}
+      th, td{padding:10px; border-bottom:1px solid #eee; text-align:left; vertical-align:top;}
+      th{font-size:13px; color:#666; font-weight:600;}
+      .mini{font-size:13px;}
+      .btnline form{display:inline-block; margin:0 6px 0 0;}
+      .btnline button{padding:8px 10px; font-size:13px; border-radius:10px;}
+      .module{border:1px solid #eee; border-radius:14px; padding:14px; margin-top:12px;}
+      .mat{margin-top:8px; padding:10px; border-radius:12px; background:#f7f7f7;}
+    </style>
+  </head>
+  <body>
+    {% load hub_extras %}
+    <div class="top">
+      <div>
+        <div class="muted"><a href="/teach">Teacher</a> · <a href="/admin/">Admin</a></div>
+        <h1 style="margin:6px 0 0 0">{{ classroom.name }}</h1>
+        <div class="muted">Join code <span class="pill">{{ classroom.join_code }}</span> · Students {{ student_count }} · Status {% if classroom.is_locked %}<strong>Locked</strong>{% else %}<strong>Open</strong>{% endif %}</div>
+      </div>
+      <div class="btnline">
+        <form method="post" action="/teach/class/{{ classroom.id }}/toggle-lock">
+          {% csrf_token %}
+          <button type="submit">{% if classroom.is_locked %}Unlock{% else %}Lock{% endif %}</button>
+        </form>
+        <form method="post" action="/teach/class/{{ classroom.id }}/rotate-code">
+          {% csrf_token %}
+          <button type="submit">Rotate code</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <h2 style="margin:0">Modules (sessions)</h2>
+        <div class="muted">Order matters. Keep it predictable.</div>
+      </div>
+
+      <div style="margin-top:12px; max-width:520px">
+        <form method="post" action="/teach/class/{{ classroom.id }}/add-module">
+          {% csrf_token %}
+          <label class="muted">New module title</label>
+          <input name="title" placeholder="e.g., Session 5 — Scratch Motion + Loops" />
+          <button type="submit" style="margin-top:10px">Add module</button>
+        </form>
+      </div>
+
+      {% if modules %}
+        {% for m in modules %}
+          <div class="module">
+            <div class="row">
+              <div>
+                <strong>{{ m.title }}</strong>
+                <div class="muted mini">{{ m.materials.all|length }} materials</div>
+              </div>
+              <div class="btnline">
+                <form method="post" action="/teach/class/{{ classroom.id }}/move-module">
+                  {% csrf_token %}
+                  <input type="hidden" name="module_id" value="{{ m.id }}" />
+                  <input type="hidden" name="direction" value="up" />
+                  <button type="submit">↑</button>
+                </form>
+                <form method="post" action="/teach/class/{{ classroom.id }}/move-module">
+                  {% csrf_token %}
+                  <input type="hidden" name="module_id" value="{{ m.id }}" />
+                  <input type="hidden" name="direction" value="down" />
+                  <button type="submit">↓</button>
+                </form>
+                <a href="/teach/module/{{ m.id }}">Open</a>
+              </div>
+            </div>
+
+            {% if m.materials.all %}
+              {% for mat in m.materials.all %}
+                <div class="mat">
+                  <div class="row">
+                    <div>
+                      <strong>{{ mat.title }}</strong>
+                      <div class="muted mini">Type: {{ mat.type }}</div>
+                    </div>
+                    <div class="muted mini">
+                      {% if mat.type == 'upload' %}
+                        Submitted: {{ submission_counts|get_item:mat.id|default:0 }} / {{ student_count }} · <a href="/teach/material/{{ mat.id }}/submissions">Submissions</a>
+                      {% endif %}
+                    </div>
+                  </div>
+                  {% if mat.type == 'link' and mat.url %}
+                    <div class="muted mini"><a href="{{ mat.url }}" target="_blank" rel="noopener">Open link</a></div>
+                  {% elif mat.type == 'text' and mat.body %}
+                    <pre style="margin:8px 0 0 0; white-space:pre-wrap;" class="muted mini">{{ mat.body|truncatechars:280 }}</pre>
+                  {% elif mat.type == 'upload' %}
+                    <div class="muted mini">Accepted: {{ mat.accepted_extensions|default:'.sb3' }} · Max {{ mat.max_upload_mb }}MB</div>
+                  {% endif %}
+                </div>
+              {% endfor %}
+            {% else %}
+              <div class="muted mini" style="margin-top:10px">No materials yet.</div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      {% else %}
+        <p class="muted" style="margin-top:12px">No modules yet.</p>
+      {% endif %}
+    </div>
+  </body>
+</html>

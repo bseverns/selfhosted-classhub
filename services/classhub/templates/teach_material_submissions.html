@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Submissions · {{ material.title }}</title>
+    <style>
+      body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; max-width:1150px; margin:40px auto; padding:0 16px;}
+      .top{display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap;}
+      .muted{color:#666; font-size:14px;}
+      .pill{display:inline-block; padding:4px 10px; border:1px solid #aaa; border-radius:999px; font-size:12px;}
+      .card{border:1px solid #ddd; border-radius:14px; padding:16px; margin-top:16px;}
+      a{color:inherit;}
+      table{width:100%; border-collapse:collapse;}
+      th, td{padding:10px; border-bottom:1px solid #eee; text-align:left; vertical-align:top;}
+      th{font-size:13px; color:#666; font-weight:600;}
+      .filters a{margin-right:10px;}
+      button{padding:10px 14px; font-size:15px; border-radius:10px; border:1px solid #333; background:#fff; cursor:pointer;}
+      .btnline{display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <div>
+        <div class="muted"><a href="/teach">Teacher</a> · <a href="/teach/class/{{ classroom.id }}">{{ classroom.name }}</a> · <a href="/teach/module/{{ module.id }}">{{ module.title }}</a></div>
+        <h1 style="margin:6px 0 0 0">Submissions</h1>
+        <div class="muted">Material: <strong>{{ material.title }}</strong> · Accepted <span class="pill">{{ material.accepted_extensions|default:'.sb3' }}</span> · Students {{ student_count }} · Missing {{ missing }}</div>
+      </div>
+      <div class="btnline">
+        <a href="?download=zip_latest">Download all latest (ZIP)</a>
+        <a href="/admin/hub/submission/?material__id__exact={{ material.id }}">Open in admin</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="filters muted">
+        Filter:
+        <a href="?show=all" {% if show == 'all' %}style="font-weight:700"{% endif %}>All</a>
+        <a href="?show=submitted" {% if show == 'submitted' %}style="font-weight:700"{% endif %}>Submitted</a>
+        <a href="?show=missing" {% if show == 'missing' %}style="font-weight:700"{% endif %}>Missing</a>
+      </div>
+
+      <table style="margin-top:10px">
+        <thead>
+          <tr>
+            <th>Student</th>
+            <th>Latest upload</th>
+            <th>Files</th>
+            <th>Latest file</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              <td><strong>{{ r.student.display_name }}</strong></td>
+              {% if r.latest %}
+                <td class="muted">{{ r.latest.uploaded_at }}</td>
+                <td class="muted">{{ r.count }}</td>
+                <td class="muted">{{ r.latest.original_filename|default:r.latest.file.name }}</td>
+                <td><a href="/submission/{{ r.latest.id }}/download">Download latest</a></td>
+              {% else %}
+                <td class="muted">—</td>
+                <td class="muted">0</td>
+                <td class="muted">—</td>
+                <td class="muted">—</td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <p class="muted" style="margin-top:14px">Downloads are private: staff can download any submission; students can only download their own.</p>
+    </div>
+  </body>
+</html>
