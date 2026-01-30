@@ -2,7 +2,7 @@
 course: piper-scratch-12
 session: 5
 slug: s05-scratch-motion-loops
-title: Scratch: Motion + Loops
+title: "Scratch: Motion + Loops"
 duration_minutes: 75
 makes: A sprite that moves in a loop and changes backdrop once.
 needs:
@@ -18,7 +18,7 @@ videos:
     minutes: 3
     outcome: Open the editor and locate the main zones.
   - id: V06
-    title: Save privately: Download to your computer
+    title: "Save privately: Download to your computer"
     minutes: 3
     outcome: Save an `.sb3` locally every time.
 submission:

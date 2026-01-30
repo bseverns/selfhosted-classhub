@@ -2,7 +2,7 @@
 course: piper-scratch-12
 session: 7
 slug: s07-animation-scene-sound
-title: Animation II: Scene + Sound
+title: "Animation II: Scene + Sound"
 duration_minutes: 75
 makes: A micro-scene with two characters and a clear beginning/shift/end.
 needs:

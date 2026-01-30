@@ -2,7 +2,7 @@
 course: piper-scratch-12
 session: 9
 slug: s09-game-score-consequences
-title: Game II: Score + Consequences
+title: "Game II: Score + Consequences"
 duration_minutes: 75
 makes: Score increases and a lose condition ends the round.
 needs:

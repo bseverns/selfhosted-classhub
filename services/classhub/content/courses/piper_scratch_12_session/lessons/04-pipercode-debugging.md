@@ -2,7 +2,7 @@
 course: piper-scratch-12
 session: 4
 slug: s04-pipercode-debugging
-title: PiperCode: Blocks + Debugging
+title: "PiperCode: Blocks + Debugging"
 duration_minutes: 75
 makes: A tiny block program + a first bug report practice.
 needs:

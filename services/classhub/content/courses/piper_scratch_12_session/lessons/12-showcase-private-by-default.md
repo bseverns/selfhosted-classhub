@@ -2,7 +2,7 @@
 course: piper-scratch-12
 session: 12
 slug: s12-showcase-private-by-default
-title: Showcase: Private-by-default
+title: "Showcase: Private-by-default"
 duration_minutes: 75
 makes: A private showcase post and a reflection; optional public share only by choice.
 needs:
@@ -14,7 +14,7 @@ privacy:
   - Save locally first; upload privately.
 videos:
   - id: V06
-    title: Save privately: Download to your computer
+    title: "Save privately: Download to your computer"
     minutes: 3
     outcome: Keep your project as a file you own.
   - id: V09

@@ -2,7 +2,7 @@
 course: piper-scratch-12
 session: 10
 slug: s10-game-levels-difficulty
-title: Game III: Levels + Difficulty
+title: "Game III: Levels + Difficulty"
 duration_minutes: 75
 makes: Difficulty ramps over time or across levels.
 needs:
@@ -38,7 +38,7 @@ extend:
   - Add an ‘easy mode’ toggle.
   - Add a ‘practice mode’ with no hazards.
 teacher_panel:
-  purpose: Introduce pacing and tuning: games are systems that evolve.
+  purpose: "Introduce pacing and tuning: games are systems that evolve."
   snags:
     - Difficulty jumps too sharply—smooth with smaller increments.
     - Instructions too long—keep short.

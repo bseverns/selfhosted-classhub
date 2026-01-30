@@ -2,7 +2,7 @@
 course: piper-scratch-12
 session: 6
 slug: s06-animation-costumes-timing
-title: Animation I: Costumes + Timing
+title: "Animation I: Costumes + Timing"
 duration_minutes: 75
 makes: A short looping animation using costume changes.
 needs:
@@ -18,7 +18,7 @@ videos:
     minutes: 4
     outcome: Animate with 2+ costumes and a wait.
   - id: V06
-    title: Save privately: Download to your computer
+    title: "Save privately: Download to your computer"
     minutes: 3
     outcome: Save an `.sb3` locally every time.
 submission:

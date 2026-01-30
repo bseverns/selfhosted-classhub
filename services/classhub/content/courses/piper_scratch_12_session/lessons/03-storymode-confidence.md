@@ -2,7 +2,7 @@
 course: piper-scratch-12
 session: 3
 slug: s03-storymode-confidence
-title: StoryMode: Guided Confidence
+title: "StoryMode: Guided Confidence"
 duration_minutes: 75
 makes: One completed guided step in StoryMode and a short reflection.
 needs:
@@ -34,7 +34,7 @@ extend:
   - Do one additional step only if you feel good.
   - Write one question you’d like to explore later.
 teacher_panel:
-  purpose: A low-stakes on-ramp: success first, complexity later.
+  purpose: "A low-stakes on-ramp: success first, complexity later."
   snags:
     - Students get pulled into long sequences—cap time.
     - Audio distraction—offer no-sound path.

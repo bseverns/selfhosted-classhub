@@ -2,7 +2,7 @@
 course: piper-scratch-12
 session: 11
 slug: s11-packaging-start-screen
-title: Packaging: Start Screen + Instructions
+title: "Packaging: Start Screen + Instructions"
 duration_minutes: 75
 makes: A polished start screen and a clear ‘how to play’.
 needs:
@@ -18,7 +18,7 @@ videos:
     minutes: 5
     outcome: Create a beginning that explains rules.
   - id: V06
-    title: Save privately: Download to your computer
+    title: "Save privately: Download to your computer"
     minutes: 3
     outcome: Save an `.sb3` locally every time.
 submission:
@@ -39,7 +39,7 @@ extend:
   - Add sound toggle (mute/unmute).
   - Add a difficulty selector (easy/normal).
 teacher_panel:
-  purpose: Packaging is care: make play approachable for others.
+  purpose: "Packaging is care: make play approachable for others."
   snags:
     - Game starts immediately—missing gate.
     - Credits reveal real names—remind pseudonyms.

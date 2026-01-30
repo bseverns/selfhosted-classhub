@@ -14,7 +14,7 @@ privacy:
   - Save locally first; upload privately.
 videos:
   - id: V06
-    title: Save privately: Download to your computer
+    title: "Save privately: Download to your computer"
     minutes: 3
     outcome: Save an `.sb3` locally and find it again.
   - id: V09

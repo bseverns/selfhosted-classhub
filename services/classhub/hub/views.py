@@ -25,6 +25,25 @@ from .models import Class, Module, Material, StudentIdentity, Submission, gen_cl
 _COURSES_DIR = Path(settings.CONTENT_ROOT) / "courses"
 
 
+def _validate_front_matter(front_matter_text: str, source: Path) -> None:
+    for lineno, line in enumerate(front_matter_text.splitlines(), start=1):
+        stripped = line.lstrip()
+        if not stripped or stripped.startswith("#") or stripped.startswith("-"):
+            continue
+        if ":" not in line:
+            continue
+        _, _, value = line.partition(":")
+        value = value.strip()
+        if not value:
+            continue
+        if value[0] in ('"', "'", "|", ">", "[", "{"):
+            continue
+        if ":" in value:
+            raise ValueError(
+                f"{source.name}:{lineno} unquoted colon in front matter line: {line.strip()}"
+            )
+
+
 def _load_course_manifest(course_slug: str) -> dict:
     manifest_path = _COURSES_DIR / course_slug / "course.yaml"
     if not manifest_path.exists():
@@ -51,7 +70,12 @@ def _load_lesson_markdown(course_slug: str, lesson_slug: str) -> tuple[dict, str
     if raw.startswith("---"):
         parts = raw.split("---", 2)
         if len(parts) >= 3:
-            fm = yaml.safe_load(parts[1]) or {}
+            front_matter_text = parts[1]
+            _validate_front_matter(front_matter_text, lesson_path)
+            try:
+                fm = yaml.safe_load(front_matter_text) or {}
+            except yaml.scanner.ScannerError as exc:
+                raise ValueError(f"Invalid YAML in {lesson_path}: {exc}") from exc
             body = parts[2].lstrip("\n")
             return fm, body
     return {}, raw
@@ -325,7 +349,10 @@ def course_lesson(request, course_slug: str, lesson_slug: str):
     if not manifest:
         return HttpResponse("Course not found", status=404)
 
-    fm, body_md = _load_lesson_markdown(course_slug, lesson_slug)
+    try:
+        fm, body_md = _load_lesson_markdown(course_slug, lesson_slug)
+    except ValueError as exc:
+        return HttpResponse(f"Invalid lesson metadata: {exc}", status=500)
     if not body_md:
         return HttpResponse("Lesson not found", status=404)
 

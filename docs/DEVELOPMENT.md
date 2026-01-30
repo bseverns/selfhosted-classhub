@@ -40,6 +40,14 @@ docker compose exec ollama ollama pull llama3.2:1b
 If you run Ollama outside of Compose, set `OLLAMA_BASE_URL` in `compose/.env`
 so the container can reach it.
 
+## Lesson front matter hygiene
+
+Lesson front matter values containing colons must be quoted (e.g., `title: "Save privately: Download..."`).
+Run `scripts/quote_lesson_frontmatter.py` after editing any lesson file to auto-quote those values.
+
+`hub.views` now validates front matter before parsing, so you get a clear `500` and the offending
+line if you forget to quote something.
+
 ## Content-only updates
 
 If you only want curriculum hot reload (not Python code), you can mount

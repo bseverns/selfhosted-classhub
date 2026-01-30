@@ -2,7 +2,7 @@
 course: piper-scratch-12
 session: 8
 slug: s08-game-controls-boundaries
-title: Game I: Controls + Boundaries
+title: "Game I: Controls + Boundaries"
 duration_minutes: 75
 makes: A controllable character that stays on screen.
 needs:
@@ -18,7 +18,7 @@ videos:
     minutes: 4
     outcome: Detect contact and respond.
   - id: V06
-    title: Save privately: Download to your computer
+    title: "Save privately: Download to your computer"
     minutes: 3
     outcome: Save an `.sb3` locally every time.
 submission:
