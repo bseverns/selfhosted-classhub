@@ -16,6 +16,7 @@ from .queueing import acquire_slot, release_slot
 
 EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I)
 PHONE_RE = re.compile(r"\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b")
+SAFE_REF_KEY_RE = re.compile(r"^[a-z0-9_-]+$")
 
 
 def _redact(text: str) -> str:
@@ -82,6 +83,26 @@ def _openai_chat(model: str, instructions: str, message: str) -> tuple[str, str]
         input=message,
     )
     return (getattr(response, "output_text", "") or ""), model
+
+
+def _resolve_reference_file(reference_key: str | None, reference_dir: str, reference_map_raw: str) -> str:
+    if not reference_key:
+        return ""
+    # Prefer explicit allowlist map when provided.
+    if reference_map_raw:
+        try:
+            reference_map = json.loads(reference_map_raw)
+            rel = reference_map.get(reference_key)
+            if rel:
+                return str(Path(reference_dir) / rel)
+        except Exception:
+            pass
+    # Safe fallback: allow direct lookup by slug in reference_dir.
+    if SAFE_REF_KEY_RE.match(reference_key):
+        candidate = Path(reference_dir) / f"{reference_key}.md"
+        if candidate.exists():
+            return str(candidate)
+    return ""
 
 
 @lru_cache(maxsize=4)
@@ -154,14 +175,9 @@ def chat(request):
     reference_dir = os.getenv("HELPER_REFERENCE_DIR", "/app/tutor/reference").strip()
     reference_map_raw = os.getenv("HELPER_REFERENCE_MAP", "").strip()
     reference_file = os.getenv("HELPER_REFERENCE_FILE", "").strip()
-    if reference_key and reference_map_raw:
-        try:
-            reference_map = json.loads(reference_map_raw)
-            rel = reference_map.get(reference_key)
-            if rel:
-                reference_file = str(Path(reference_dir) / rel)
-        except Exception:
-            pass
+    resolved = _resolve_reference_file(reference_key, reference_dir, reference_map_raw)
+    if resolved:
+        reference_file = resolved
     reference_text = _load_reference_text(reference_file)
     instructions = build_instructions(
         strictness,

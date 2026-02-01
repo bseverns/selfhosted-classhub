@@ -117,6 +117,20 @@ HELPER_REFERENCE_MAP={"piper_scratch":"piper_scratch.md"}
 
 This keeps file access safe and lets you swap references per lesson or course.
 
+### Per-lesson references generated from content
+
+For lesson-specific expertise, generate one reference file per lesson slug.
+The helper will load `reference_dir/<lesson_slug>.md` when a lesson sets
+`helper_reference: <lesson_slug>` in `course.yaml`.
+
+Generate references from the course markdown:
+
+```bash
+python scripts/generate_lesson_references.py \
+  --course services/classhub/content/courses/piper_scratch_12_session/course.yaml \
+  --out services/homework_helper/tutor/reference
+```
+
 ## Scope mode
 
 Use `HELPER_SCOPE_MODE` to control how strictly the helper stays within the lesson:
