@@ -20,6 +20,9 @@
       table{border-collapse:collapse; width:100%;}
       th,td{border:1px solid #ddd; padding:8px; text-align:left;}
       blockquote{border-left:3px solid #ddd; margin:12px 0; padding-left:12px; color:#444;}
+      .video-item{border:1px solid #eee; border-radius:12px; padding:12px; margin-top:12px;}
+      .video-frame{position:relative; width:100%; padding-top:56.25%; border-radius:10px; overflow:hidden; background:#f7f7f7;}
+      .video-frame iframe{position:absolute; inset:0; width:100%; height:100%; border:0;}
     </style>
   </head>
   <body>
@@ -41,6 +44,38 @@
         {% endif %}
       </div>
     </div>
+
+    {% if lesson_videos %}
+      <div class="card">
+        <h2 style="margin-top:0;">Lesson videos</h2>
+        {% for video in lesson_videos %}
+          <div class="video-item">
+            <h3 style="margin:0 0 8px 0;">
+              {% if video.id %}{{ video.id }} — {% endif %}{{ video.title }}
+              {% if video.minutes %}<span class="muted">({{ video.minutes }} min)</span>{% endif %}
+            </h3>
+            {% if video.embed_url %}
+              <div class="video-frame">
+                <iframe
+                  src="{{ video.embed_url }}"
+                  title="{{ video.title }}"
+                  loading="lazy"
+                  allowfullscreen
+                ></iframe>
+              </div>
+            {% endif %}
+            {% if video.url %}
+              <p style="margin:10px 0 0 0;">
+                <a href="{{ video.url }}" target="_blank" rel="noopener noreferrer">Open video in a new tab</a>
+              </p>
+            {% endif %}
+            {% if video.outcome %}
+              <p class="muted" style="margin:8px 0 0 0;">After this you can: {{ video.outcome }}</p>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
 
     <div class="card">
       {{ lesson_html|safe }}

@@ -13,6 +13,10 @@ privacy:
   - Use a chosen name or nickname.
   - Save locally first; upload privately.
 videos:
+  - id: V01
+    title: "Boot + desktop tour (Piper kit)"
+    minutes: 4
+    outcome: Boot safely, find Scratch, and navigate the desktop.
   - id: V06
     title: "Save privately: Download to your computer"
     minutes: 3
@@ -47,6 +51,7 @@ teacher_panel:
     - Student can produce a local `.sb3` file.
     - Student can submit without using public sharing.
 helper_allowed_topics:
+  - "boot and desktop basics"
   - "open scratch"
   - "make a small change"
   - "download .sb3"
@@ -62,6 +67,9 @@ helper_allowed_topics:
 - Save locally first; upload privately.
 
 ## Watch
+
+### V01 — Boot + desktop tour (Piper kit) (4 min)
+**After this you can:** Boot safely, find Scratch, and navigate the desktop.
 
 ### V06 — Save privately: Download to your computer (3 min)
 **After this you can:** Save an `.sb3` locally and find it again.

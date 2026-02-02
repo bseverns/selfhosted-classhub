@@ -73,6 +73,9 @@ By default, the helper is configured to use a local Ollama server. See:
 - `docs/DISASTER_RECOVERY.md` (start-from-zero rebuild checklist)
 - `scripts/new_course_scaffold.py` (create a new course skeleton)
 - `docs/COURSE_AUTHORING.md` (how to create and edit courses)
+- `scripts/ingest_syllabus_md.py` (parse a syllabus .md into a course)
+- `scripts/validate_lesson_video_order.py` (check foundational video sequence)
+- `scripts/content_preflight.sh` (pre-deploy content validation gate)
 
 ## Production (with a domain)
 

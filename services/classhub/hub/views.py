@@ -3,6 +3,7 @@ import re
 import tempfile
 import zipfile
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 from django.http import FileResponse, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
@@ -24,6 +25,7 @@ from .models import Class, Module, Material, StudentIdentity, Submission, gen_cl
 # --- Repo-authored course content (markdown) ---------------------------------
 
 _COURSES_DIR = Path(settings.CONTENT_ROOT) / "courses"
+_YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "www.youtu.be", "youtube-nocookie.com", "www.youtube-nocookie.com"}
 
 
 def _validate_front_matter(front_matter_text: str, source: Path) -> None:
@@ -120,6 +122,75 @@ def _render_markdown_to_safe_html(markdown_text: str) -> str:
 
     cleaned = bleach.clean(html, tags=list(allowed_tags), attributes=allowed_attrs, strip=True)
     return cleaned
+
+
+def _extract_youtube_id(url: str) -> str:
+    if not url:
+        return ""
+    parsed = urlparse(url.strip())
+    host = parsed.netloc.lower()
+    if ":" in host:
+        host = host.split(":", 1)[0]
+    if host not in _YOUTUBE_HOSTS:
+        return ""
+
+    video_id = ""
+    if host.endswith("youtu.be"):
+        video_id = parsed.path.lstrip("/").split("/", 1)[0]
+    elif parsed.path == "/watch":
+        video_id = parse_qs(parsed.query).get("v", [""])[0]
+    elif parsed.path.startswith("/embed/") or parsed.path.startswith("/shorts/") or parsed.path.startswith("/live/"):
+        parts = [p for p in parsed.path.split("/") if p]
+        if len(parts) >= 2:
+            video_id = parts[1]
+
+    if re.fullmatch(r"[A-Za-z0-9_-]{6,20}", video_id or ""):
+        return video_id
+    return ""
+
+
+def _safe_external_url(url: str) -> str:
+    if not url:
+        return ""
+    parsed = urlparse(url.strip())
+    if parsed.scheme.lower() not in {"http", "https"}:
+        return ""
+    return url.strip()
+
+
+def _normalize_lesson_videos(front_matter: dict) -> list[dict]:
+    if not isinstance(front_matter, dict):
+        return []
+
+    videos = front_matter.get("videos") or []
+    normalized = []
+    for i, video in enumerate(videos, start=1):
+        if not isinstance(video, dict):
+            continue
+        vid = str(video.get("id") or "").strip()
+        title = str(video.get("title") or vid or f"Video {i}").strip()
+        minutes = video.get("minutes")
+        outcome = str(video.get("outcome") or "").strip()
+        url = _safe_external_url(str(video.get("url") or "").strip())
+        youtube_id = str(video.get("youtube_id") or "").strip()
+        if youtube_id and not re.fullmatch(r"[A-Za-z0-9_-]{6,20}", youtube_id):
+            youtube_id = ""
+        if not youtube_id and url:
+            youtube_id = _extract_youtube_id(url)
+        if youtube_id and not url:
+            url = f"https://www.youtube.com/watch?v={youtube_id}"
+        embed_url = f"https://www.youtube.com/embed/{youtube_id}" if youtube_id else ""
+        normalized.append(
+            {
+                "id": vid,
+                "title": title,
+                "minutes": minutes,
+                "outcome": outcome,
+                "url": url,
+                "embed_url": embed_url,
+            }
+        )
+    return normalized
 
 
 def healthz(request):
@@ -409,6 +480,7 @@ def course_lesson(request, course_slug: str, lesson_slug: str):
         return HttpResponse("Lesson not found", status=404)
 
     html = _render_markdown_to_safe_html(body_md)
+    lesson_videos = _normalize_lesson_videos(fm)
 
     lessons = manifest.get("lessons") or []
     idx = next((i for i, l in enumerate(lessons) if l.get("slug") == lesson_slug), None)
@@ -440,6 +512,7 @@ def course_lesson(request, course_slug: str, lesson_slug: str):
             "lesson_slug": lesson_slug,
             "front_matter": fm,
             "lesson_html": html,
+            "lesson_videos": lesson_videos,
             "prev": prev_l,
             "next": next_l,
             "helper_widget": helper_widget,

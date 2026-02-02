@@ -59,6 +59,18 @@ HELPER_QUEUE_SLOT_TTL_SECONDS=120
 docker compose logs -f --tail=200 classhub_web
 ```
 
+## Pre-deploy content checks
+
+```bash
+bash scripts/content_preflight.sh piper_scratch_12_session
+```
+
+Use strict global checks when you want full video sequence enforcement:
+
+```bash
+bash scripts/content_preflight.sh piper_scratch_12_session --strict-global
+```
+
 ## Backups
 
 - `scripts/backup_postgres.sh`

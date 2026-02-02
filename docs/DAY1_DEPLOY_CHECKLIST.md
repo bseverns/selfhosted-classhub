@@ -13,6 +13,8 @@ See `scripts/bootstrap_day1.sh` for an automated starter.
 ## Run
 - Copy `compose/.env.example` → `compose/.env`
 - Configure LLM backend (default is Ollama; ensure it is running)
+- Run content preflight checks (blocks bad lesson video/copy sync):
+  - `bash scripts/content_preflight.sh piper_scratch_12_session`
 - Run production compose only (ignore dev override):
   - `docker compose -f docker-compose.yml up -d --build`
   - or remove/rename `docker-compose.override.yml` first
