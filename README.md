@@ -11,7 +11,7 @@ This repo is intentionally *Day‑1 shippable*: it boots on a single Ubuntu serv
 
 Also included:
 
-- **Upload dropbox** for Scratch `.sb3` files (per-lesson, tied to the student session cookie)
+- **Homework dropbox** for lesson file submissions (extension rules come from lesson front matter, tied to the student session cookie)
 
 > Philosophy: keep the system legible. Logs you can read. Deploys you can repeat. Features that don’t hide in someone else’s cloud.
 
@@ -118,6 +118,7 @@ docker compose exec classhub_web python manage.py import_coursepack --course-slu
 ```
 
 Students will see one module per session with an **Open lesson** link.
+If a lesson has `submission.type: file`, import also creates a **Homework dropbox** material.
 
 ## Repository map
 

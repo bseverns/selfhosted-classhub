@@ -298,6 +298,56 @@ def _parse_extensions(ext_csv: str) -> list[str]:
     return out
 
 
+def _front_matter_submission(front_matter: dict) -> dict:
+    """Normalize lesson front-matter submission settings."""
+    if not isinstance(front_matter, dict):
+        return {"type": "", "accepted_exts": [], "naming": ""}
+
+    submission = front_matter.get("submission") or {}
+    if not isinstance(submission, dict):
+        return {"type": "", "accepted_exts": [], "naming": ""}
+
+    sub_type = str(submission.get("type") or "").strip().lower()
+    naming = str(submission.get("naming") or "").strip()
+    accepted = submission.get("accepted") or []
+    if isinstance(accepted, str):
+        accepted = [p.strip() for p in accepted.replace("|", ",").split(",") if p.strip()]
+
+    accepted_exts = []
+    for raw in accepted:
+        ext = str(raw).strip().lower()
+        if not ext:
+            continue
+        if not ext.startswith("."):
+            ext = "." + ext
+        if ext not in accepted_exts:
+            accepted_exts.append(ext)
+
+    return {"type": sub_type, "accepted_exts": accepted_exts, "naming": naming}
+
+
+def _find_lesson_upload_material(classroom_id: int, course_slug: str, lesson_slug: str):
+    """Find the upload material linked to a lesson for a specific class."""
+    lesson_url = f"/course/{course_slug}/{lesson_slug}"
+    module_ids = (
+        Module.objects.filter(
+            classroom_id=classroom_id,
+            materials__type=Material.TYPE_LINK,
+            materials__url=lesson_url,
+        )
+        .order_by("order_index", "id")
+        .values_list("id", flat=True)
+    )
+    if not module_ids:
+        return None
+
+    return (
+        Material.objects.filter(module_id__in=module_ids, type=Material.TYPE_UPLOAD)
+        .order_by("module__order_index", "order_index", "id")
+        .first()
+    )
+
+
 def _build_lesson_topics(front_matter: dict) -> list[str]:
     if not isinstance(front_matter, dict):
         return []
@@ -490,6 +540,29 @@ def course_lesson(request, course_slug: str, lesson_slug: str):
     helper_context = fm.get("title") or lesson_slug
     helper_topics = _build_lesson_topics(fm)
     helper_allowed_topics = _build_allowed_topics(fm)
+    lesson_submission = _front_matter_submission(fm)
+    lesson_upload_material = None
+    lesson_upload_status = {}
+
+    if (
+        lesson_submission.get("type") == "file"
+        and getattr(request, "student", None) is not None
+        and getattr(request, "classroom", None) is not None
+    ):
+        lesson_upload_material = _find_lesson_upload_material(request.classroom.id, course_slug, lesson_slug)
+        if lesson_upload_material is not None:
+            student_submissions = Submission.objects.filter(
+                material=lesson_upload_material,
+                student=request.student,
+            )
+            latest = student_submissions.only("id", "uploaded_at").first()
+            if latest is not None:
+                lesson_upload_status = {
+                    "count": student_submissions.count(),
+                    "last_uploaded_at": latest.uploaded_at,
+                    "last_id": latest.id,
+                }
+
     helper_reference = lesson_meta.get("helper_reference") or manifest.get("helper_reference") or ""
     helper_widget = render_to_string(
         "includes/helper_widget.html",
@@ -516,6 +589,11 @@ def course_lesson(request, course_slug: str, lesson_slug: str):
             "prev": prev_l,
             "next": next_l,
             "helper_widget": helper_widget,
+            "student": getattr(request, "student", None),
+            "classroom": getattr(request, "classroom", None),
+            "lesson_submission": lesson_submission,
+            "lesson_upload_material": lesson_upload_material,
+            "lesson_upload_status": lesson_upload_status,
         },
     )
 

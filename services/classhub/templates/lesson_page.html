@@ -77,6 +77,37 @@
       </div>
     {% endif %}
 
+    {% if lesson_submission.type == "file" %}
+      <div class="card">
+        <h2 style="margin-top:0;">Homework dropbox</h2>
+        <p class="muted" style="margin-top:8px;">
+          {% if lesson_submission.accepted_exts %}
+            Accepted: <strong>{{ lesson_submission.accepted_exts|join:", " }}</strong>
+          {% else %}
+            Accepted: <strong>.sb3</strong>
+          {% endif %}
+          {% if lesson_submission.naming %}
+            · Suggested name: <strong>{{ lesson_submission.naming }}</strong>
+          {% endif %}
+        </p>
+
+        {% if student and lesson_upload_material %}
+          <div class="nav" style="margin-top:8px;">
+            <a class="btn" href="/material/{{ lesson_upload_material.id }}/upload">Open dropbox</a>
+            {% if lesson_upload_status %}
+              <span class="muted">Uploaded {{ lesson_upload_status.count }} file{{ lesson_upload_status.count|pluralize }} · latest {{ lesson_upload_status.last_uploaded_at }}</span>
+            {% endif %}
+          </div>
+        {% elif student %}
+          <p class="muted" style="margin:8px 0 0 0;">Dropbox is not configured for this lesson yet. A teacher can re-import the course pack to enable it.</p>
+        {% else %}
+          <div class="nav" style="margin-top:8px;">
+            <a class="btn" href="/">Join your class to upload homework</a>
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
+
     <div class="card">
       {{ lesson_html|safe }}
     </div>

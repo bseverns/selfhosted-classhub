@@ -1,5 +1,21 @@
 # Decisions (living)
 
+## 2026-02-04 — Lesson-linked homework dropbox from front matter
+
+**Why:**
+- Students needed a predictable place to submit work directly from each lesson.
+- Submission rules already exist in lesson front matter (`submission.type`, `accepted`, `naming`).
+- Teachers should not have to manually create upload materials per lesson.
+
+**Tradeoffs:**
+- Dropbox availability now depends on importing course packs into class modules.
+- Non-file submissions (`submission.type: text`) still rely on teacher workflow outside file uploads.
+
+**Plan:**
+- During `import_coursepack`, auto-create a `Homework dropbox` material for any lesson with `submission.type: file`.
+- Use front matter extension rules to configure allowed upload types.
+- Surface the dropbox on lesson pages when a student is signed in, with latest upload status.
+
 ## 2026-01-30 — Local dev override for hot reload
 
 **Why:**

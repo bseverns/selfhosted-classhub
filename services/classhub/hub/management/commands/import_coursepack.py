@@ -52,6 +52,29 @@ def _read_front_matter(course_slug: str, rel_path: str) -> dict:
     return yaml.safe_load(parts[1]) or {}
 
 
+def _normalize_submission_extensions(submission: dict, naming: str) -> list[str]:
+    accepted = submission.get("accepted") or []
+    if isinstance(accepted, str):
+        accepted = [p.strip() for p in accepted.replace("|", ",").split(",") if p.strip()]
+
+    exts = []
+    for raw in accepted:
+        ext = str(raw).strip().lower()
+        if not ext:
+            continue
+        if not ext.startswith("."):
+            ext = "." + ext
+        if ext not in exts:
+            exts.append(ext)
+
+    if not exts and naming:
+        maybe_ext = Path(naming).suffix.strip().lower()
+        if maybe_ext.startswith("."):
+            exts.append(maybe_ext)
+
+    return exts
+
+
 class Command(BaseCommand):
     help = "Import a repo-authored course pack into Modules + Materials."
 
@@ -140,29 +163,15 @@ class Command(BaseCommand):
             makes = (fm.get("makes") or "").strip()
             submission = fm.get("submission") or {}
             naming = (submission.get("naming") or "").strip()
-            accepted = submission.get("accepted") or []
+            submission_type = str(submission.get("type") or "").strip().lower()
+            exts = _normalize_submission_extensions(submission, naming)
 
-            # If the lesson expects a Scratch project file, add a built-in dropbox.
-            # This lets students submit without needing a public Scratch account.
-            norm_accept = [str(a).strip() for a in accepted if str(a).strip()]
-            norm_lower = [a.lower() for a in norm_accept]
-            wants_sb3 = any(a.endswith(".sb3") or a == "sb3" for a in norm_lower)
-            if wants_sb3:
-                exts = []
-                for a in norm_lower:
-                    if a in ("sb3", ".sb3"):
-                        if ".sb3" not in exts:
-                            exts.append(".sb3")
-                    elif a.startswith("."):
-                        if a not in exts:
-                            exts.append(a)
-                    else:
-                        if ("." + a) not in exts:
-                            exts.append("." + a)
-
+            # If the lesson expects a file submission, add a built-in dropbox.
+            # This lets students submit privately from the lesson itself.
+            if submission_type == "file":
                 Material.objects.create(
                     module=mod,
-                    title="Upload your project file",
+                    title="Homework dropbox",
                     type=Material.TYPE_UPLOAD,
                     accepted_extensions=",".join(exts or [".sb3"]),
                     max_upload_mb=50,
@@ -175,8 +184,8 @@ class Command(BaseCommand):
                 summary_lines.append(f"Makes: {makes}")
             if naming:
                 summary_lines.append(f"Submit: {naming}")
-            elif accepted:
-                summary_lines.append(f"Submit: {', '.join(accepted)}")
+            elif exts:
+                summary_lines.append(f"Submit: {', '.join(exts)}")
 
             if summary_lines:
                 Material.objects.create(

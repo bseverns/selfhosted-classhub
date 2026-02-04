@@ -149,6 +149,19 @@ videos:
 `youtube_id` and `url` are both supported; when either resolves to YouTube, the
 lesson page will embed the video and also show an external link.
 
+## Homework dropbox behavior
+
+When you run `import_coursepack`, each lesson with:
+
+```yaml
+submission:
+  type: file
+```
+
+gets a `Homework dropbox` material automatically. Accepted file extensions are
+taken from `submission.accepted` (or inferred from `submission.naming` if needed).
+Students can open the dropbox from the lesson page and from `/student`.
+
 ## Helper configuration (optional)
 
 - Per-course reference: set `helper_reference` in `course.yaml`.
