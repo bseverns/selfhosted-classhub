@@ -12,6 +12,7 @@ This repo is intentionally *Day‑1 shippable*: it boots on a single Ubuntu serv
 Also included:
 
 - **Homework dropbox** for lesson file submissions (extension rules come from lesson front matter, tied to the student session cookie)
+- **Lesson video manager** with publish/draft status and bulk upload for teacher workflows
 
 > Philosophy: keep the system legible. Logs you can read. Deploys you can repeat. Features that don’t hide in someone else’s cloud.
 
@@ -47,6 +48,7 @@ docker compose exec classhub_web python manage.py createsuperuser
 
 - Teacher portal: `http://localhost/teach`
 - Lesson tracker: `http://localhost/teach/lessons`
+- Lesson videos manager: `http://localhost/teach/videos`
 - Admin: `http://localhost/admin/`
 - Student join page: `http://localhost/`
 

@@ -79,6 +79,7 @@
                     <td>
                       <strong><a href="{{ row.lesson_url }}" target="_blank" rel="noopener">{{ row.lesson_title }}</a></strong>
                       <div class="muted mini">{{ row.course_slug }} / {{ row.lesson_slug }}</div>
+                      <a class="quick" href="/teach/videos?class_id={{ classroom.id }}&course_slug={{ row.course_slug }}&lesson_slug={{ row.lesson_slug }}">Manage videos</a>
                       {% if row.review_url %}
                         <a class="quick" href="{{ row.review_url }}">{{ row.review_label }}</a>
                       {% endif %}

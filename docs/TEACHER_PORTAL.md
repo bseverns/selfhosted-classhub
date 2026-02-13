@@ -151,6 +151,14 @@ Operational checklist: `docs/TEACHER_HANDOFF_CHECKLIST.md`.
   - lesson tracker grouped by class
   - per-dropbox quick actions: `All`, `Missing`, `ZIP latest`
   - row shortcut: `Review missing now`
+  - row shortcut: `Manage videos`
+- `/teach/videos`:
+  - select course + lesson
+  - upload video file or add video URL
+  - bulk-upload multiple files in one action
+  - order videos for lesson playback
+  - publish/unpublish videos (draft visibility)
+  - remove lesson-tagged videos
 - `/teach/class/<id>`:
   - lesson tracker for one class
   - module/material editor
@@ -163,8 +171,33 @@ Operational checklist: `docs/TEACHER_HANDOFF_CHECKLIST.md`.
 1. Sign in at `/admin/login/` with a staff or superuser account.
 2. Open `/teach`.
 3. Open `Lessons` for the target class.
-4. Use `Review missing now` to jump to students who still owe uploads.
-5. Use `ZIP latest` for batch review/download.
+4. Use `Manage videos` on a lesson row to add/update that lesson's video list.
+5. Use `Review missing now` to jump to students who still owe uploads.
+6. Use `ZIP latest` for batch review/download.
+
+## Lesson video workflow
+
+Use `/teach/videos` to tag media directly to `course_slug + lesson_slug`.
+
+1. Pick a course and lesson from the selectors.
+2. Add a title (+ optional minutes/outcome).
+3. Choose one source:
+   - `Video URL` (self-hosted MP4/HLS or YouTube URL), or
+   - `Upload video file` (stored as a private lesson asset).
+4. Save, then use `↑` / `↓` to set playback order.
+5. Use `Publish` / `Unpublish` to control whether students can see each video.
+6. Use `Bulk upload files` when adding many lesson clips at once (titles auto-generate from filenames).
+
+Large file note:
+- Upload request size is controlled by `CLASSHUB_UPLOAD_MAX_MB` (default `600`) in compose env.
+- After changing `.env`, restart `classhub_web` to apply.
+
+Lesson behavior:
+- Student lesson page video panels are collapsed by default.
+- Clicking a video heading opens that panel.
+- Opening a different heading closes the previous panel.
+- Uploaded files stream via `/lesson-video/<id>/stream` with permission checks.
+- Draft videos are hidden from students until published.
 
 ## Troubleshooting
 

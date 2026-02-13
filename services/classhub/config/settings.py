@@ -109,7 +109,9 @@ MEDIA_URL = "/_uploads/"
 
 # Conservative defaults; raise if you expect large assets.
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 5MB (larger files stream to disk)
-DATA_UPLOAD_MAX_MEMORY_SIZE = 60 * 1024 * 1024  # 60MB request cap
+# Request cap (MB) applies to teacher video uploads too.
+UPLOAD_REQUEST_MAX_MB = env.int("CLASSHUB_UPLOAD_MAX_MB", default=600)
+DATA_UPLOAD_MAX_MEMORY_SIZE = UPLOAD_REQUEST_MAX_MB * 1024 * 1024
 
 # When behind Caddy, Django should respect forwarded proto for secure cookies.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

@@ -1,10 +1,11 @@
 import json
+import mimetypes
 import re
 import tempfile
 import zipfile
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
-from django.http import FileResponse, HttpResponse, JsonResponse
+from urllib.parse import parse_qs, urlencode, urlparse
+from django.http import FileResponse, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
 from django.views.decorators.http import require_POST
@@ -19,7 +20,7 @@ import markdown as md
 import bleach
 
 from .forms import SubmissionUploadForm
-from .models import Class, Module, Material, StudentIdentity, Submission, gen_class_code
+from .models import Class, LessonVideo, Module, Material, StudentIdentity, Submission, gen_class_code
 
 
 # --- Repo-authored course content (markdown) ---------------------------------
@@ -27,6 +28,15 @@ from .models import Class, Module, Material, StudentIdentity, Submission, gen_cl
 _COURSES_DIR = Path(settings.CONTENT_ROOT) / "courses"
 _YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "www.youtu.be", "youtube-nocookie.com", "www.youtube-nocookie.com"}
 _COURSE_LESSON_PATH_RE = re.compile(r"^/course/(?P<course_slug>[-a-zA-Z0-9_]+)/(?P<lesson_slug>[-a-zA-Z0-9_]+)$")
+_VIDEO_EXTENSIONS = {
+    ".m3u8",
+    ".mp4",
+    ".m4v",
+    ".mov",
+    ".webm",
+    ".ogg",
+    ".ogv",
+}
 
 
 def _validate_front_matter(front_matter_text: str, source: Path) -> None:
@@ -159,6 +169,35 @@ def _safe_external_url(url: str) -> str:
     return url.strip()
 
 
+def _is_probably_video_url(url: str) -> bool:
+    if not url:
+        return False
+    parsed = urlparse(url)
+    path = (parsed.path or "").lower()
+    return any(path.endswith(ext) for ext in _VIDEO_EXTENSIONS)
+
+
+def _video_mime_type(url: str) -> str:
+    guessed, _ = mimetypes.guess_type(url or "")
+    return guessed or "video/mp4"
+
+
+def _title_from_video_filename(filename: str) -> str:
+    stem = Path(filename or "").stem
+    stem = re.sub(r"[_-]+", " ", stem)
+    stem = re.sub(r"\s+", " ", stem).strip()
+    return (stem[:200] or "Untitled video")
+
+
+def _next_lesson_video_order(course_slug: str, lesson_slug: str) -> int:
+    max_idx = (
+        LessonVideo.objects.filter(course_slug=course_slug, lesson_slug=lesson_slug)
+        .aggregate(models.Max("order_index"))
+        .get("order_index__max")
+    )
+    return int(max_idx) + 1 if max_idx is not None else 0
+
+
 def _parse_course_lesson_url(url: str) -> tuple[str, str] | None:
     """Return (course_slug, lesson_slug) when url matches /course/<course>/<lesson>."""
     if not url:
@@ -197,6 +236,9 @@ def _normalize_lesson_videos(front_matter: dict) -> list[dict]:
         if youtube_id and not url:
             url = f"https://www.youtube.com/watch?v={youtube_id}"
         embed_url = f"https://www.youtube.com/embed/{youtube_id}" if youtube_id else ""
+        source_type = "youtube" if youtube_id else ("native" if _is_probably_video_url(url) else "link")
+        media_url = url if source_type == "native" else ""
+        media_type = _video_mime_type(url) if media_url else ""
         normalized.append(
             {
                 "id": vid,
@@ -205,6 +247,9 @@ def _normalize_lesson_videos(front_matter: dict) -> list[dict]:
                 "outcome": outcome,
                 "url": url,
                 "embed_url": embed_url,
+                "source_type": source_type,
+                "media_url": media_url,
+                "media_type": media_type,
             }
         )
     return normalized
@@ -548,6 +593,7 @@ def course_lesson(request, course_slug: str, lesson_slug: str):
 
     html = _render_markdown_to_safe_html(body_md)
     lesson_videos = _normalize_lesson_videos(fm)
+    lesson_videos.extend(_normalize_stored_lesson_videos(course_slug, lesson_slug))
 
     lessons = manifest.get("lessons") or []
     idx = next((i for i, l in enumerate(lessons) if l.get("slug") == lesson_slug), None)
@@ -613,6 +659,81 @@ def course_lesson(request, course_slug: str, lesson_slug: str):
             "lesson_upload_status": lesson_upload_status,
         },
     )
+
+
+def _iter_course_lesson_options() -> list[dict]:
+    options: list[dict] = []
+    if not _COURSES_DIR.exists():
+        return options
+
+    for manifest_path in sorted(_COURSES_DIR.glob("*/course.yaml")):
+        course_slug = manifest_path.parent.name
+        manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+        course_title = str(manifest.get("title") or course_slug).strip()
+        lessons = manifest.get("lessons") or []
+        for lesson in lessons:
+            lesson_slug = str(lesson.get("slug") or "").strip()
+            if not lesson_slug:
+                continue
+            lesson_title = str(lesson.get("title") or lesson_slug).strip()
+            session = lesson.get("session")
+            options.append(
+                {
+                    "course_slug": course_slug,
+                    "course_title": course_title,
+                    "lesson_slug": lesson_slug,
+                    "lesson_title": lesson_title,
+                    "session": session,
+                }
+            )
+    return options
+
+
+def _normalize_stored_lesson_videos(course_slug: str, lesson_slug: str) -> list[dict]:
+    rows = list(
+        LessonVideo.objects.filter(course_slug=course_slug, lesson_slug=lesson_slug, is_active=True)
+        .order_by("order_index", "id")
+    )
+    normalized = []
+    for row in rows:
+        url = (row.source_url or "").strip()
+        if row.video_file:
+            media_url = f"/lesson-video/{row.id}/stream"
+            media_type = _video_mime_type(row.video_file.name)
+            source_type = "native"
+            embed_url = ""
+        else:
+            youtube_id = _extract_youtube_id(url)
+            if youtube_id:
+                source_type = "youtube"
+                embed_url = f"https://www.youtube.com/embed/{youtube_id}"
+                media_url = ""
+                media_type = ""
+            elif _is_probably_video_url(url):
+                source_type = "native"
+                embed_url = ""
+                media_url = url
+                media_type = _video_mime_type(url)
+            else:
+                source_type = "link"
+                embed_url = ""
+                media_url = ""
+                media_type = ""
+
+        normalized.append(
+            {
+                "id": f"asset-{row.id}",
+                "title": row.title,
+                "minutes": row.minutes,
+                "outcome": row.outcome,
+                "url": url or media_url,
+                "embed_url": embed_url,
+                "source_type": source_type,
+                "media_url": media_url,
+                "media_type": media_type,
+            }
+        )
+    return normalized
 
 
 # --- Teacher cockpit (staff-only UI) ----------------------------------------
@@ -729,6 +850,303 @@ def _build_lesson_tracker_rows(modules: list[Module], student_count: int) -> lis
             )
 
     return rows
+
+
+def _request_can_view_lesson_video(request) -> bool:
+    if request.user.is_authenticated and request.user.is_staff:
+        return True
+    if getattr(request, "student", None) is not None:
+        return True
+    return False
+
+
+def _stream_file_with_range(request, file_path: Path, content_type: str):
+    file_size = file_path.stat().st_size
+    range_header = request.headers.get("Range") or request.META.get("HTTP_RANGE", "")
+    if not range_header:
+        response = FileResponse(open(file_path, "rb"), content_type=content_type)
+        response["Content-Length"] = str(file_size)
+        response["Accept-Ranges"] = "bytes"
+        return response
+
+    m = re.match(r"bytes=(\d*)-(\d*)", range_header)
+    if not m:
+        response = HttpResponse(status=416)
+        response["Content-Range"] = f"bytes */{file_size}"
+        return response
+
+    start_raw, end_raw = m.group(1), m.group(2)
+    if not start_raw and not end_raw:
+        response = HttpResponse(status=416)
+        response["Content-Range"] = f"bytes */{file_size}"
+        return response
+
+    if start_raw:
+        start = int(start_raw)
+        end = int(end_raw) if end_raw else file_size - 1
+    else:
+        suffix_len = int(end_raw)
+        if suffix_len <= 0:
+            response = HttpResponse(status=416)
+            response["Content-Range"] = f"bytes */{file_size}"
+            return response
+        start = max(file_size - suffix_len, 0)
+        end = file_size - 1
+
+    if start >= file_size or end < start:
+        response = HttpResponse(status=416)
+        response["Content-Range"] = f"bytes */{file_size}"
+        return response
+
+    end = min(end, file_size - 1)
+    length = (end - start) + 1
+
+    file_handle = open(file_path, "rb")
+
+    def _iter_file(handle, offset: int, remaining: int, chunk_size: int = 64 * 1024):
+        try:
+            handle.seek(offset)
+            left = remaining
+            while left > 0:
+                chunk = handle.read(min(chunk_size, left))
+                if not chunk:
+                    break
+                left -= len(chunk)
+                yield chunk
+        finally:
+            handle.close()
+
+    response = StreamingHttpResponse(
+        _iter_file(file_handle, start, length),
+        status=206,
+        content_type=content_type,
+    )
+    response["Content-Length"] = str(length)
+    response["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+    response["Accept-Ranges"] = "bytes"
+    return response
+
+
+def lesson_video_stream(request, video_id: int):
+    video = LessonVideo.objects.filter(id=video_id).first()
+    if not video or not video.video_file:
+        return HttpResponse("Not found", status=404)
+
+    is_staff_user = bool(request.user.is_authenticated and request.user.is_staff)
+    if not video.is_active and not is_staff_user:
+        return HttpResponse("Not found", status=404)
+
+    if not _request_can_view_lesson_video(request):
+        return HttpResponse("Forbidden", status=403)
+
+    try:
+        file_path = Path(video.video_file.path)
+    except Exception:
+        return HttpResponse("Not found", status=404)
+    if not file_path.exists():
+        return HttpResponse("Not found", status=404)
+
+    content_type = _video_mime_type(video.video_file.name)
+    return _stream_file_with_range(request, file_path, content_type)
+
+
+def _lesson_video_redirect_params(course_slug: str, lesson_slug: str, class_id: int = 0, notice: str = "") -> str:
+    query = {"course_slug": course_slug, "lesson_slug": lesson_slug}
+    if class_id:
+        query["class_id"] = str(class_id)
+    if notice:
+        query["notice"] = notice
+    return urlencode(query)
+
+
+@staff_member_required
+def teach_videos(request):
+    try:
+        class_id = int((request.GET.get("class_id") or request.POST.get("class_id") or "0").strip())
+    except Exception:
+        class_id = 0
+
+    all_options = _iter_course_lesson_options()
+    by_course: dict[str, dict] = {}
+    for row in all_options:
+        course_slug = row["course_slug"]
+        if course_slug not in by_course:
+            by_course[course_slug] = {
+                "course_slug": course_slug,
+                "course_title": row["course_title"],
+                "lessons": [],
+            }
+        by_course[course_slug]["lessons"].append(
+            {
+                "lesson_slug": row["lesson_slug"],
+                "lesson_title": row["lesson_title"],
+                "session": row["session"],
+            }
+        )
+
+    course_rows = list(by_course.values())
+    course_rows.sort(key=lambda c: (c["course_title"].lower(), c["course_slug"]))
+    for course_row in course_rows:
+        course_row["lessons"].sort(key=lambda l: ((l["session"] or 0), l["lesson_title"].lower(), l["lesson_slug"]))
+
+    selected_course_slug = (request.GET.get("course_slug") or request.POST.get("course_slug") or "").strip()
+    if not selected_course_slug and course_rows:
+        selected_course_slug = course_rows[0]["course_slug"]
+
+    selected_course = next((c for c in course_rows if c["course_slug"] == selected_course_slug), None)
+    lesson_rows = selected_course["lessons"] if selected_course else []
+    selected_lesson_slug = (request.GET.get("lesson_slug") or request.POST.get("lesson_slug") or "").strip()
+    if not selected_lesson_slug and lesson_rows:
+        selected_lesson_slug = lesson_rows[0]["lesson_slug"]
+
+    notice = (request.GET.get("notice") or "").strip()
+    error = ""
+
+    if request.method == "POST":
+        action = (request.POST.get("action") or "").strip()
+        if not selected_course_slug or not selected_lesson_slug:
+            error = "Select a course + lesson first."
+        elif action == "add":
+            title = (request.POST.get("title") or "").strip()[:200]
+            minutes_raw = (request.POST.get("minutes") or "").strip()
+            outcome = (request.POST.get("outcome") or "").strip()[:300]
+            source_url = (request.POST.get("source_url") or "").strip()
+            video_file = request.FILES.get("video_file")
+            is_active = (request.POST.get("is_active") or "1").strip() == "1"
+
+            if not title:
+                error = "Title is required."
+            elif not source_url and not video_file:
+                error = "Provide either a video URL or upload a video file."
+            elif source_url and video_file:
+                error = "Use URL or file upload, not both."
+            else:
+                minutes = None
+                if minutes_raw:
+                    try:
+                        minutes = max(int(minutes_raw), 0)
+                    except Exception:
+                        error = "Minutes must be a whole number."
+
+                if not error:
+                    LessonVideo.objects.create(
+                        course_slug=selected_course_slug,
+                        lesson_slug=selected_lesson_slug,
+                        title=title,
+                        minutes=minutes,
+                        outcome=outcome,
+                        source_url=source_url,
+                        video_file=video_file,
+                        order_index=_next_lesson_video_order(selected_course_slug, selected_lesson_slug),
+                        is_active=is_active,
+                    )
+                    notice = "Video saved." if is_active else "Video saved as draft."
+        elif action == "bulk_upload":
+            files = [f for f in request.FILES.getlist("video_files") if (getattr(f, "name", "") or "").strip()]
+            title_prefix = (request.POST.get("title_prefix") or "").strip()[:80]
+            is_active = (request.POST.get("bulk_is_active") or "1").strip() == "1"
+
+            if not files:
+                error = "Select one or more video files to upload."
+            else:
+                next_order = _next_lesson_video_order(selected_course_slug, selected_lesson_slug)
+                added = 0
+                for file_obj in files:
+                    file_title = _title_from_video_filename(file_obj.name)
+                    if title_prefix:
+                        file_title = f"{title_prefix}: {file_title}"[:200]
+                    LessonVideo.objects.create(
+                        course_slug=selected_course_slug,
+                        lesson_slug=selected_lesson_slug,
+                        title=file_title,
+                        source_url="",
+                        video_file=file_obj,
+                        order_index=next_order,
+                        is_active=is_active,
+                    )
+                    next_order += 1
+                    added += 1
+                status_label = "published" if is_active else "draft"
+                notice = f"Uploaded {added} video file(s) as {status_label}."
+        elif action == "delete":
+            try:
+                video_id = int(request.POST.get("video_id") or 0)
+            except Exception:
+                video_id = 0
+            item = LessonVideo.objects.filter(
+                id=video_id,
+                course_slug=selected_course_slug,
+                lesson_slug=selected_lesson_slug,
+            ).first()
+            if item:
+                item.delete()
+                notice = "Video removed."
+        elif action == "set_active":
+            try:
+                video_id = int(request.POST.get("video_id") or 0)
+            except Exception:
+                video_id = 0
+            should_be_active = (request.POST.get("active") or "0").strip() == "1"
+            item = LessonVideo.objects.filter(
+                id=video_id,
+                course_slug=selected_course_slug,
+                lesson_slug=selected_lesson_slug,
+            ).first()
+            if item:
+                item.is_active = should_be_active
+                item.save(update_fields=["is_active", "updated_at"])
+                notice = "Video published." if should_be_active else "Video moved to draft."
+        elif action == "move":
+            try:
+                video_id = int(request.POST.get("video_id") or 0)
+            except Exception:
+                video_id = 0
+            direction = (request.POST.get("direction") or "").strip()
+            rows = list(
+                LessonVideo.objects.filter(course_slug=selected_course_slug, lesson_slug=selected_lesson_slug)
+                .order_by("order_index", "id")
+            )
+            idx = next((i for i, row in enumerate(rows) if row.id == video_id), None)
+            if idx is not None:
+                if direction == "up" and idx > 0:
+                    rows[idx - 1], rows[idx] = rows[idx], rows[idx - 1]
+                elif direction == "down" and idx < len(rows) - 1:
+                    rows[idx + 1], rows[idx] = rows[idx], rows[idx + 1]
+                for i, row in enumerate(rows):
+                    if row.order_index != i:
+                        row.order_index = i
+                        row.save(update_fields=["order_index"])
+                notice = "Video order updated."
+
+        if not error:
+            query = _lesson_video_redirect_params(selected_course_slug, selected_lesson_slug, class_id, notice)
+            return redirect(f"/teach/videos?{query}")
+
+    lesson_video_rows = list(
+        LessonVideo.objects.filter(course_slug=selected_course_slug, lesson_slug=selected_lesson_slug)
+        .order_by("order_index", "id")
+    ) if selected_course_slug and selected_lesson_slug else []
+    published_count = sum(1 for row in lesson_video_rows if row.is_active)
+    draft_count = max(len(lesson_video_rows) - published_count, 0)
+
+    class_back_link = f"/teach/class/{class_id}" if class_id else "/teach/lessons"
+    return render(
+        request,
+        "teach_videos.html",
+        {
+            "course_rows": course_rows,
+            "selected_course_slug": selected_course_slug,
+            "selected_lesson_slug": selected_lesson_slug,
+            "lesson_rows": lesson_rows,
+            "lesson_video_rows": lesson_video_rows,
+            "published_count": published_count,
+            "draft_count": draft_count,
+            "class_id": class_id,
+            "class_back_link": class_back_link,
+            "notice": notice,
+            "error": error,
+        },
+    )
 
 
 @staff_member_required

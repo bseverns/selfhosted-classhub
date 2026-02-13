@@ -15,6 +15,7 @@ urlpatterns = [
     # Upload dropbox
     path("material/<int:material_id>/upload", views.material_upload),
     path("submission/<int:submission_id>/download", views.submission_download),
+    path("lesson-video/<int:video_id>/stream", views.lesson_video_stream),
 
     # Repo-authored course content (markdown)
     path("course/<slug:course_slug>", views.course_overview),
@@ -29,6 +30,7 @@ urlpatterns = [
     path("teach/class/<int:class_id>/rotate-code", views.teach_rotate_code),
     path("teach/class/<int:class_id>/add-module", views.teach_add_module),
     path("teach/class/<int:class_id>/move-module", views.teach_move_module),
+    path("teach/videos", views.teach_videos),
     path("teach/module/<int:module_id>", views.teach_module),
     path("teach/module/<int:module_id>/add-material", views.teach_add_material),
     path("teach/module/<int:module_id>/move-material", views.teach_move_material),

@@ -1,5 +1,25 @@
 # Decisions (living)
 
+## 2026-02-13 — Self-hosted lesson video library with teacher tagging + accordion playback
+
+**Why:**
+- Course front matter listed lesson videos, but non-YouTube sources were link-only.
+- Teachers needed an in-product way to upload and tag videos to specific lessons.
+- Student lesson pages needed a cleaner video UX (open one at a time, avoid multiple concurrent players).
+
+**Tradeoffs:**
+- Uploaded files are streamed through Django for access control, which is simpler but less efficient than direct object storage/CDN delivery at scale.
+- Teacher tagging currently keys on `course_slug + lesson_slug` (global), not per-class overrides.
+
+**Plan:**
+- Add `LessonVideo` model with tagged metadata (`course_slug`, `lesson_slug`, title, outcome, URL or uploaded file, order).
+- Add staff UI at `/teach/videos` for upload/link, ordering, and deletion.
+- Add publish/draft controls so teachers can stage videos before student release.
+- Add bulk file upload flow to reduce repetitive tagging work for multi-clip lessons.
+- Add secure stream endpoint `/lesson-video/<id>/stream` with byte-range support for seekable playback.
+- Render lesson videos as an accordion where clicking a heading opens that item and closes/pause-resets others.
+- Keep YouTube embed support while adding inline playback for self-hosted/native video URLs.
+
 ## 2026-02-13 — Add `create_teacher` management command for staff account ops
 
 **Why:**

@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 
-from .models import Class, Module, Material, StudentIdentity, Submission
+from .models import Class, Module, Material, StudentIdentity, Submission, LessonVideo
 
 @admin.register(Class)
 class ClassAdmin(admin.ModelAdmin):
@@ -37,3 +37,10 @@ class SubmissionAdmin(admin.ModelAdmin):
         return format_html('<a href="/submission/{}/download">Download</a>', obj.id)
 
     download_link.short_description = "Download"
+
+
+@admin.register(LessonVideo)
+class LessonVideoAdmin(admin.ModelAdmin):
+    list_display = ("title", "course_slug", "lesson_slug", "order_index", "is_active", "updated_at")
+    list_filter = ("course_slug", "lesson_slug", "is_active")
+    search_fields = ("title", "course_slug", "lesson_slug", "source_url")

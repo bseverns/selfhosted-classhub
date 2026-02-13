@@ -23,9 +23,33 @@
       .video-item {
         border: 1px solid rgba(22, 59, 80, 0.14);
         border-radius: 12px;
-        padding: 12px;
         margin-top: 12px;
         background: rgba(255, 255, 255, 0.46);
+      }
+      .video-toggle {
+        width: 100%;
+        border: 0;
+        border-radius: 12px;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        text-align: left;
+        padding: 12px 14px;
+      }
+      .video-toggle:hover {
+        filter: none;
+        box-shadow: none;
+        transform: none;
+        background: rgba(255, 255, 255, 0.4);
+      }
+      .video-toggle h3 {
+        margin: 0;
+      }
+      .video-panel {
+        padding: 0 14px 14px;
+      }
+      .video-panel[hidden] {
+        display: none;
       }
       .video-frame {
         position: relative;
@@ -41,6 +65,15 @@
         width: 100%;
         height: 100%;
         border: 0;
+      }
+      .video-native {
+        display: block;
+        width: 100%;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.7);
+      }
+      .video-state {
+        margin-top: 8px;
       }
       .lesson-content {
         line-height: 1.58;
@@ -113,30 +146,54 @@
           <div class="card">
             <h2 style="margin-top:0;">Lesson videos</h2>
             {% for video in lesson_videos %}
-              <div class="video-item">
-                <h3 style="margin:0 0 8px 0;">
-                  {% if video.id %}{{ video.id }} — {% endif %}{{ video.title }}
-                  {% if video.minutes %}<span class="muted">({{ video.minutes }} min)</span>{% endif %}
-                </h3>
-                {% if video.embed_url %}
-                  <div class="video-frame">
-                    <iframe
-                      src="{{ video.embed_url }}"
-                      title="{{ video.title }}"
-                      loading="lazy"
-                      allowfullscreen
-                    ></iframe>
-                  </div>
-                {% endif %}
-                {% if video.url %}
-                  <p style="margin:10px 0 0 0;">
-                    <a href="{{ video.url }}" target="_blank" rel="noopener noreferrer">Open video in a new tab</a>
-                  </p>
-                {% endif %}
-                {% if video.outcome %}
-                  <p class="muted" style="margin:8px 0 0 0;">After this you can: {{ video.outcome }}</p>
-                {% endif %}
-              </div>
+              <section class="video-item">
+                <button
+                  type="button"
+                  class="video-toggle"
+                  id="video-toggle-{{ forloop.counter }}"
+                  aria-expanded="false"
+                  aria-controls="video-panel-{{ forloop.counter }}"
+                >
+                  <h3>
+                    {% if video.id %}{{ video.id }} — {% endif %}{{ video.title }}
+                    {% if video.minutes %}<span class="muted">({{ video.minutes }} min)</span>{% endif %}
+                  </h3>
+                </button>
+                <div
+                  id="video-panel-{{ forloop.counter }}"
+                  class="video-panel"
+                  role="region"
+                  aria-labelledby="video-toggle-{{ forloop.counter }}"
+                  hidden
+                >
+                  {% if video.source_type == "youtube" and video.embed_url %}
+                    <div class="video-frame">
+                      <iframe
+                        data-src="{{ video.embed_url }}"
+                        title="{{ video.title }}"
+                        loading="lazy"
+                        allowfullscreen
+                      ></iframe>
+                    </div>
+                  {% elif video.source_type == "native" and video.media_url %}
+                    <video class="video-native" controls preload="metadata" playsinline>
+                      <source src="{{ video.media_url }}" {% if video.media_type %}type="{{ video.media_type }}"{% endif %} />
+                      Your browser does not support this video. Use the open link below.
+                    </video>
+                  {% else %}
+                    <p class="muted video-state">No inline video source is configured yet.</p>
+                  {% endif %}
+
+                  {% if video.url %}
+                    <p class="video-state">
+                      <a href="{{ video.url }}" target="_blank" rel="noopener noreferrer">Open video in a new tab</a>
+                    </p>
+                  {% endif %}
+                  {% if video.outcome %}
+                    <p class="muted video-state">After this you can: {{ video.outcome }}</p>
+                  {% endif %}
+                </div>
+              </section>
             {% endfor %}
           </div>
         {% endif %}
@@ -181,5 +238,61 @@
         <p class="muted">If something feels unsafe to share, keep your work private and submit only the file. You control what leaves your device.</p>
       </main>
     </div>
+    <script>
+      (() => {
+        const items = Array.from(document.querySelectorAll('.video-item'));
+        if (!items.length) return;
+
+        const closeItem = (item) => {
+          const button = item.querySelector('.video-toggle');
+          const panel = item.querySelector('.video-panel');
+          if (!button || !panel) return;
+          button.setAttribute('aria-expanded', 'false');
+          panel.hidden = true;
+
+          const iframe = panel.querySelector('iframe[data-src]');
+          if (iframe && iframe.src) {
+            iframe.src = '';
+          }
+
+          const media = panel.querySelector('video');
+          if (media) {
+            try { media.pause(); } catch (_) {}
+          }
+        };
+
+        const openItem = (item) => {
+          const button = item.querySelector('.video-toggle');
+          const panel = item.querySelector('.video-panel');
+          if (!button || !panel) return;
+
+          items.forEach((other) => {
+            if (other !== item) closeItem(other);
+          });
+
+          button.setAttribute('aria-expanded', 'true');
+          panel.hidden = false;
+
+          const iframe = panel.querySelector('iframe[data-src]');
+          if (iframe && !iframe.src) {
+            iframe.src = iframe.dataset.src || '';
+          }
+        };
+
+        items.forEach((item) => {
+          const button = item.querySelector('.video-toggle');
+          const panel = item.querySelector('.video-panel');
+          if (!button || !panel) return;
+          button.addEventListener('click', () => {
+            const expanded = button.getAttribute('aria-expanded') === 'true';
+            if (expanded) {
+              closeItem(item);
+            } else {
+              openItem(item);
+            }
+          });
+        });
+      })();
+    </script>
   </body>
 </html>

@@ -9,6 +9,7 @@ Note: for Day-1, we keep the model tiny. As the platform grows, add:
 - Audit logs
 """
 
+import re
 import secrets
 from django.db import models
 
@@ -122,3 +123,38 @@ class StudentIdentity(models.Model):
 
     def __str__(self) -> str:
         return f"{self.display_name} @ {self.classroom.join_code}"
+
+
+def _safe_path_part(raw: str) -> str:
+    value = re.sub(r"[^a-zA-Z0-9_-]+", "-", (raw or "").strip().lower())
+    value = value.strip("-")
+    return value or "unknown"
+
+
+def _lesson_video_upload_to(instance: "LessonVideo", filename: str) -> str:
+    course = _safe_path_part(instance.course_slug)
+    lesson = _safe_path_part(instance.lesson_slug)
+    return f"lesson_videos/{course}/{lesson}/{filename}"
+
+
+class LessonVideo(models.Model):
+    course_slug = models.SlugField(max_length=120)
+    lesson_slug = models.SlugField(max_length=120)
+    title = models.CharField(max_length=200)
+    minutes = models.PositiveIntegerField(null=True, blank=True)
+    outcome = models.CharField(max_length=300, blank=True, default="")
+    source_url = models.URLField(blank=True, default="")
+    video_file = models.FileField(upload_to=_lesson_video_upload_to, blank=True, null=True)
+    order_index = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order_index", "id"]
+        indexes = [
+            models.Index(fields=["course_slug", "lesson_slug", "is_active"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.course_slug}/{self.lesson_slug}: {self.title}"
