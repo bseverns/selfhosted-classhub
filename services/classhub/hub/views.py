@@ -29,6 +29,19 @@ from .models import Class, LessonVideo, Module, Material, StudentIdentity, Submi
 _COURSES_DIR = Path(settings.CONTENT_ROOT) / "courses"
 _YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "www.youtu.be", "youtube-nocookie.com", "www.youtube-nocookie.com"}
 _COURSE_LESSON_PATH_RE = re.compile(r"^/course/(?P<course_slug>[-a-zA-Z0-9_]+)/(?P<lesson_slug>[-a-zA-Z0-9_]+)$")
+_HEADING_LEVEL2_RE = re.compile(r"^##\s+(.+?)\s*$")
+_LEGACY_TEACHER_DETAILS_RE = re.compile(r"(?is)<details>\s*<summary>.*?teacher.*?</summary>.*?</details>")
+_TEACHER_SECTION_PREFIXES = (
+    "teacher prep",
+    "teacher panel",
+    "teacher notes",
+    "agenda",
+    "materials",
+    "checkpoints",
+    "common stuck points",
+    "extensions (fast finisher menu)",
+    "notes + options",
+)
 _VIDEO_EXTENSIONS = {
     ".m3u8",
     ".mp4",
@@ -94,6 +107,110 @@ def _load_lesson_markdown(course_slug: str, lesson_slug: str) -> tuple[dict, str
             body = parts[2].lstrip("\n")
             return fm, body, match
     return {}, raw, match
+
+
+def _is_teacher_section_heading(heading_text: str) -> bool:
+    normalized = re.sub(r"\s+", " ", (heading_text or "").strip().lower())
+    if not normalized:
+        return False
+    if normalized.startswith("teacher "):
+        return True
+    return any(normalized.startswith(prefix) for prefix in _TEACHER_SECTION_PREFIXES)
+
+
+def _split_lesson_markdown_for_audiences(markdown_text: str) -> tuple[str, str]:
+    """Return (learner_markdown, teacher_markdown)."""
+    if not (markdown_text or "").strip():
+        return "", ""
+
+    legacy_teacher_blocks = _LEGACY_TEACHER_DETAILS_RE.findall(markdown_text)
+    stripped_markdown = _LEGACY_TEACHER_DETAILS_RE.sub("", markdown_text)
+
+    learner_chunks: list[str] = []
+    teacher_chunks: list[str] = []
+    chunk_lines: list[str] = []
+    chunk_is_teacher = False
+
+    def flush_chunk():
+        if not chunk_lines:
+            return
+        text = "\n".join(chunk_lines).strip()
+        chunk_lines.clear()
+        if not text:
+            return
+        if chunk_is_teacher:
+            teacher_chunks.append(text)
+        else:
+            learner_chunks.append(text)
+
+    for line in stripped_markdown.splitlines():
+        heading = _HEADING_LEVEL2_RE.match(line)
+        if heading:
+            flush_chunk()
+            chunk_lines.append(line)
+            chunk_is_teacher = _is_teacher_section_heading(heading.group(1))
+            continue
+        chunk_lines.append(line)
+    flush_chunk()
+
+    for block in legacy_teacher_blocks:
+        block = (block or "").strip()
+        if block:
+            teacher_chunks.append(block)
+
+    learner_markdown = "\n\n".join(c for c in learner_chunks if c).strip()
+    teacher_markdown = "\n\n".join(c for c in teacher_chunks if c).strip()
+
+    if learner_markdown:
+        learner_markdown += "\n"
+    if teacher_markdown:
+        teacher_markdown += "\n"
+    return learner_markdown, teacher_markdown
+
+
+def _teacher_panel_markdown(front_matter: dict) -> str:
+    panel = front_matter.get("teacher_panel") or {}
+    if not isinstance(panel, dict):
+        return ""
+
+    lines = ["## Teacher panel"]
+    purpose = str(panel.get("purpose") or "").strip()
+    if purpose:
+        lines.extend(["", f"**Purpose:** {purpose}"])
+
+    snags = panel.get("snags") or []
+    if isinstance(snags, str):
+        snags = [snags]
+    snags = [str(s).strip() for s in snags if str(s).strip()]
+    if snags:
+        lines.extend(["", "**Common snags:**"])
+        lines.extend([f"- {item}" for item in snags])
+
+    assessment = panel.get("assessment") or []
+    if isinstance(assessment, str):
+        assessment = [assessment]
+    assessment = [str(a).strip() for a in assessment if str(a).strip()]
+    if assessment:
+        lines.extend(["", "**What to look for:**"])
+        lines.extend([f"- {item}" for item in assessment])
+
+    if len(lines) == 1:
+        return ""
+    return "\n".join(lines).strip() + "\n"
+
+
+def _load_teacher_material_html(course_slug: str, lesson_slug: str) -> str:
+    try:
+        front_matter, body_markdown, _ = _load_lesson_markdown(course_slug, lesson_slug)
+    except ValueError:
+        return ""
+
+    _, teacher_body = _split_lesson_markdown_for_audiences(body_markdown)
+    teacher_panel = _teacher_panel_markdown(front_matter)
+    teacher_markdown = "\n\n".join(part.strip() for part in [teacher_panel, teacher_body] if part.strip()).strip()
+    if not teacher_markdown:
+        return ""
+    return _render_markdown_to_safe_html(teacher_markdown)
 
 
 def _render_markdown_to_safe_html(markdown_text: str) -> str:
@@ -598,7 +715,10 @@ def course_lesson(request, course_slug: str, lesson_slug: str):
     if not body_md:
         return HttpResponse("Lesson not found", status=404)
 
-    html = _render_markdown_to_safe_html(body_md)
+    learner_body_md, _teacher_body_md = _split_lesson_markdown_for_audiences(body_md)
+    if not learner_body_md.strip():
+        learner_body_md = "### Learner activity\nAsk your teacher for today's activity steps.\n"
+    html = _render_markdown_to_safe_html(learner_body_md)
     lesson_videos = _normalize_lesson_videos(fm)
     lesson_videos.extend(_normalize_stored_lesson_videos(course_slug, lesson_slug))
 
@@ -792,6 +912,8 @@ def _build_lesson_tracker_rows(modules: list[Module], student_count: int) -> lis
     rows: list[dict] = []
     upload_material_ids = []
     module_materials_map: dict[int, list[Material]] = {}
+    teacher_material_html_by_lesson: dict[tuple[str, str], str] = {}
+    lesson_title_by_lesson: dict[tuple[str, str], str] = {}
 
     for module in modules:
         mats = list(module.materials.all())
@@ -848,16 +970,28 @@ def _build_lesson_tracker_rows(modules: list[Module], student_count: int) -> lis
                 continue
             seen_lessons.add(lesson_key)
             course_slug, lesson_slug = parsed
+
+            if lesson_key not in teacher_material_html_by_lesson:
+                teacher_material_html_by_lesson[lesson_key] = _load_teacher_material_html(course_slug, lesson_slug)
+                try:
+                    front_matter, _body_markdown, _lesson_meta = _load_lesson_markdown(course_slug, lesson_slug)
+                except ValueError:
+                    front_matter = {}
+                lesson_title_by_lesson[lesson_key] = (
+                    str(front_matter.get("title") or "").strip() or mat.title
+                )
+
             rows.append(
                 {
                     "module": module,
-                    "lesson_title": mat.title,
+                    "lesson_title": lesson_title_by_lesson.get(lesson_key, mat.title),
                     "lesson_url": mat.url,
                     "course_slug": course_slug,
                     "lesson_slug": lesson_slug,
                     "dropboxes": dropboxes,
                     "review_url": review_url,
                     "review_label": review_label,
+                    "teacher_material_html": teacher_material_html_by_lesson.get(lesson_key, ""),
                 }
             )
 

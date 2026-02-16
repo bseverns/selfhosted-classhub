@@ -1,5 +1,20 @@
 # Decisions (living)
 
+## 2026-02-16 — Keep lesson pages learner-only; move teacher notes to teacher tools
+
+**Why:**
+- Learner lesson pages were rendering teacher-authored sections (prep, agenda, checkpoints).
+- We need `/course/...` to be safe for student-only reading.
+
+**Tradeoffs:**
+- Teacher sections are hidden from learner pages by heading-based rules.
+- Mis-labeled headings may land in the wrong audience bucket until normalized.
+
+**Plan:**
+- Split lesson markdown into learner vs teacher sections at render time.
+- Treat headings like `Teacher prep`, `Agenda`, `Materials`, `Checkpoints`, and `Common stuck points` as teacher-only.
+- Keep teacher notes visible in `/teach/lessons` and `/teach/class/<id>` via expandable panels.
+
 ## 2026-02-16 — Fail-open lesson pages when `LessonVideo` table is missing
 
 **Why:**

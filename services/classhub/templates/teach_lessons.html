@@ -21,6 +21,21 @@
       .dropbox:last-child { margin-bottom: 0; }
       .actions { margin-top: 6px; }
       .actions a { margin-right: 10px; font-size: 13px; }
+      .teacher-note {
+        margin-top: 10px;
+        padding: 10px;
+        border-radius: 12px;
+        border: 1px solid rgba(22, 59, 80, 0.14);
+        background: rgba(255, 255, 255, 0.42);
+      }
+      .teacher-note summary {
+        cursor: pointer;
+        font-weight: 700;
+        color: #1b4258;
+      }
+      .teacher-note-body {
+        margin-top: 8px;
+      }
     </style>
   </head>
   <body class="glass-theme">
@@ -77,6 +92,12 @@
                         <a class="quick" href="/teach/videos?class_id={{ group.classroom.id }}&course_slug={{ row.course_slug }}&lesson_slug={{ row.lesson_slug }}">Manage videos</a>
                         {% if row.review_url %}
                           <a class="quick" href="{{ row.review_url }}">{{ row.review_label }}</a>
+                        {% endif %}
+                        {% if row.teacher_material_html %}
+                          <details class="teacher-note">
+                            <summary>Teacher notes</summary>
+                            <div class="teacher-note-body">{{ row.teacher_material_html|safe }}</div>
+                          </details>
                         {% endif %}
                       </td>
                       <td>

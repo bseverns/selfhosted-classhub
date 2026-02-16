@@ -61,7 +61,10 @@ Notes:
   - **Common stuck points + fixes** → `help.quick_fixes`
   - **Extensions** → `extend`
   - **Teacher prep** → `teacher_panel.prep`
-- The **Agenda** section is preserved in the lesson body verbatim.
+- Headings such as **Teacher prep**, **Agenda**, **Materials**, **Checkpoints**, and
+  **Common stuck points + fixes** are treated as teacher-facing sections in the app.
+  They are hidden on learner lesson pages and shown in teacher tools (`/teach/lessons`
+  and class dashboard rows).
 - DOCX works best if section titles are on their own line (e.g., “Materials”, “Agenda”).
 - The script prints a warning if no `Session 01: Title` headers are found.
 
