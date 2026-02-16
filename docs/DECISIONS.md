@@ -1,5 +1,20 @@
 # Decisions (living)
 
+## 2026-02-16 — Rejoin by class code reuses existing student identity by display name
+
+**Why:**
+- Students who log out and rejoin with the same name were creating duplicate identities.
+- Duplicate identities fragment submission history and lesson progress visibility.
+
+**Tradeoffs:**
+- Name matching is class-scoped and case-insensitive.
+- Students sharing the same display name in one class will map to one identity in MVP.
+
+**Plan:**
+- On `/join`, lookup existing `StudentIdentity` by `classroom + display_name__iexact`.
+- Reuse that identity and refresh `last_seen_at` instead of creating a new row.
+- Serialize join flow per class transaction to reduce same-name race duplicates.
+
 ## 2026-02-16 — Date-based lesson release with intro-only pre-access
 
 **Why:**

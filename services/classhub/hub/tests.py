@@ -1,3 +1,4 @@
+import json
 from io import StringIO
 from datetime import timedelta
 
@@ -219,3 +220,44 @@ class LessonReleaseTests(TestCase):
         )
         self.assertEqual(resp.status_code, 403)
         self.assertContains(resp, locked_until.isoformat())
+
+
+class JoinClassTests(TestCase):
+    def setUp(self):
+        self.classroom = Class.objects.create(name="Join Test", join_code="JOIN1234")
+
+    def test_join_reuses_existing_student_identity_same_name(self):
+        payload = {"class_code": self.classroom.join_code, "display_name": "Ada"}
+        r1 = self.client.post("/join", data=json.dumps(payload), content_type="application/json")
+        self.assertEqual(r1.status_code, 200)
+        first_id = self.client.session.get("student_id")
+
+        r2 = self.client.post("/join", data=json.dumps(payload), content_type="application/json")
+        self.assertEqual(r2.status_code, 200)
+        second_id = self.client.session.get("student_id")
+
+        self.assertEqual(first_id, second_id)
+        self.assertEqual(
+            StudentIdentity.objects.filter(classroom=self.classroom, display_name__iexact="Ada").count(),
+            1,
+        )
+
+    def test_join_reuses_identity_case_insensitive_name(self):
+        r1 = self.client.post(
+            "/join",
+            data=json.dumps({"class_code": self.classroom.join_code, "display_name": "Ada"}),
+            content_type="application/json",
+        )
+        self.assertEqual(r1.status_code, 200)
+        first_id = self.client.session.get("student_id")
+
+        r2 = self.client.post(
+            "/join",
+            data=json.dumps({"class_code": self.classroom.join_code, "display_name": "ada"}),
+            content_type="application/json",
+        )
+        self.assertEqual(r2.status_code, 200)
+        second_id = self.client.session.get("student_id")
+
+        self.assertEqual(first_id, second_id)
+        self.assertEqual(StudentIdentity.objects.filter(classroom=self.classroom).count(), 1)

@@ -14,7 +14,7 @@ from django.utils import timezone
 from django.middleware.csrf import get_token
 from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
-from django.db import models
+from django.db import models, transaction
 from django.db.utils import OperationalError, ProgrammingError
 
 import yaml
@@ -423,9 +423,19 @@ def join_class(request):
     if classroom.is_locked:
         return JsonResponse({"error": "class_locked"}, status=403)
 
-    student = StudentIdentity.objects.create(classroom=classroom, display_name=name)
-    student.last_seen_at = timezone.now()
-    student.save(update_fields=["last_seen_at"])
+    with transaction.atomic():
+        # Serialize joins per class so two same-name joins can't race into duplicates.
+        Class.objects.select_for_update().filter(id=classroom.id).first()
+        student = (
+            StudentIdentity.objects.filter(classroom=classroom, display_name__iexact=name)
+            .order_by("id")
+            .first()
+        )
+        if student is None:
+            student = StudentIdentity.objects.create(classroom=classroom, display_name=name)
+
+        student.last_seen_at = timezone.now()
+        student.save(update_fields=["last_seen_at"])
 
     request.session["student_id"] = student.id
     request.session["class_id"] = classroom.id
