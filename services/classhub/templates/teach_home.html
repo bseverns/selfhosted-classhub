@@ -50,7 +50,7 @@
             <div class="muted">
               Staff-only cockpit · <a href="/teach/lessons">Lesson tracker</a> · <a href="/teach/videos">Lesson videos</a>
               {% if request.user.is_superuser %} · <a href="/admin/">Admin</a>{% endif %}
-              · <a href="/">Student join page</a>
+              · <a href="/">Student join page</a> · <a href="/teach/logout">Log out</a>
             </div>
           </div>
           <div class="muted">Signed in as <strong>{{ request.user.username }}</strong></div>

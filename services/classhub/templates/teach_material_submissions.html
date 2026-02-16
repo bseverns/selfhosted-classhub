@@ -18,7 +18,7 @@
       <main id="main-content">
         <div class="top">
           <div>
-            <div class="muted"><a href="/teach">Teacher</a> · <a href="/teach/lessons?class_id={{ classroom.id }}">Lesson tracker</a> · <a href="/teach/class/{{ classroom.id }}">{{ classroom.name }}</a> · <a href="/teach/module/{{ module.id }}">{{ module.title }}</a></div>
+            <div class="muted"><a href="/teach">Teacher</a> · <a href="/teach/lessons?class_id={{ classroom.id }}">Lesson tracker</a> · <a href="/teach/class/{{ classroom.id }}">{{ classroom.name }}</a> · <a href="/teach/module/{{ module.id }}">{{ module.title }}</a> · <a href="/teach/logout">Log out</a></div>
             <h1>Submissions</h1>
             <div class="muted">Material: <strong>{{ material.title }}</strong> · Accepted <span class="pill">{{ material.accepted_extensions|default:'.sb3' }}</span> · Students {{ student_count }} · Missing {{ missing }}</div>
           </div>

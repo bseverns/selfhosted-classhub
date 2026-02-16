@@ -14,6 +14,7 @@ from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.middleware.csrf import get_token
 from django.conf import settings
+from django.contrib.auth import logout as auth_logout
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db import models, transaction
 from django.db.utils import OperationalError, ProgrammingError
@@ -1081,6 +1082,12 @@ def submission_download(request, submission_id: int):
 def student_logout(request):
     request.session.flush()
     return redirect("/")
+
+
+def teacher_logout(request):
+    auth_logout(request)
+    request.session.flush()
+    return redirect("/admin/login/")
 
 
 def course_overview(request, course_slug: str):

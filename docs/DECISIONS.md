@@ -1,5 +1,20 @@
 # Decisions (living)
 
+## 2026-02-16 — Add explicit teacher logout route and simplify admin login UI
+
+**Why:**
+- Teachers needed an obvious way to end staff sessions from `/teach` screens.
+- The admin login view should avoid extra sidebar/theme/filter controls that distract from sign-in.
+
+**Tradeoffs:**
+- `/teach/logout` always clears the full session and redirects to `/admin/login/`.
+- Admin sidebar navigation filters are disabled globally for a simpler admin surface.
+
+**Plan:**
+- Add `GET /teach/logout` that logs out Django auth and flushes session state.
+- Add `Log out` links to all teacher templates.
+- Disable Django admin nav sidebar and hide login-page toggle/popout controls.
+
 ## 2026-02-16 — Same-device rejoin without return code using signed cookie hints
 
 **Why:**

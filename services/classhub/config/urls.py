@@ -12,6 +12,7 @@ admin.site.has_permission = _admin_superuser_only
 admin.site.site_header = "createMPLS Course Admin"
 admin.site.site_title = "createMPLS Course Admin"
 admin.site.index_title = "createMPLS Course Admin"
+admin.site.enable_nav_sidebar = False
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -34,6 +35,7 @@ urlpatterns = [
 
     # Teacher cockpit (staff-only)
     path("teach", views.teach_home),
+    path("teach/logout", views.teacher_logout),
     path("teach/lessons", views.teach_lessons),
     path("teach/lessons/release", views.teach_set_lesson_release),
     path("teach/create-class", views.teach_create_class),

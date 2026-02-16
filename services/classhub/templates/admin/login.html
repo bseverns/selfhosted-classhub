@@ -31,6 +31,14 @@
     box-shadow: none;
   }
 
+  /* Keep the login page focused: remove Django toggle/popout controls. */
+  #header .theme-toggle,
+  #header [data-theme-toggle],
+  .toggle-nav-sidebar,
+  #nav-sidebar {
+    display: none !important;
+  }
+
   #branding h1,
   #site-name a {
     color: #0f2f42;
@@ -204,7 +212,7 @@
         {% endfor %}
       {% endif %}
 
-      <form action="{{ app_path }}" method="post" id="login-form">
+      <form action="{{ app_path }}" method="post" id="login-form" autocomplete="off">
         {% csrf_token %}
         <div class="form-row">
           {{ form.username.label_tag }} {{ form.username }}
@@ -226,4 +234,22 @@
     </section>
   </div>
 </main>
+<script>
+  (function () {
+    var form = document.getElementById("login-form");
+    if (!form) {
+      return;
+    }
+    var username = form.querySelector('input[name="username"]');
+    var password = form.querySelector('input[name="password"]');
+    if (username) {
+      username.setAttribute("autocomplete", "off");
+      username.setAttribute("autocapitalize", "none");
+      username.setAttribute("spellcheck", "false");
+    }
+    if (password) {
+      password.setAttribute("autocomplete", "new-password");
+    }
+  })();
+</script>
 {% endblock %}

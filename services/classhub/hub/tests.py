@@ -76,6 +76,17 @@ class TeacherPortalTests(TestCase):
         self.assertContains(resp, "Recent submissions")
         self.assertContains(resp, "Ada")
 
+    def test_teacher_logout_ends_staff_session(self):
+        self.client.force_login(self.staff)
+        resp = self.client.get("/teach/logout")
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp["Location"], "/admin/login/")
+        self.assertIsNone(self.client.session.get("_auth_user_id"))
+
+        denied = self.client.get("/teach")
+        self.assertEqual(denied.status_code, 302)
+        self.assertIn("/admin/login/", denied["Location"])
+
 
 class CreateTeacherCommandTests(TestCase):
     def test_create_teacher_defaults_to_staff_non_superuser(self):
