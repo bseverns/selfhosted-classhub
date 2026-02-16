@@ -1,5 +1,20 @@
 # Decisions (living)
 
+## 2026-02-16 — Restrict Django admin to superusers; hide admin links for non-admin teachers
+
+**Why:**
+- Teachers use `/teach` for day-to-day operations.
+- `/admin` should be visible and accessible only to accounts with explicit admin authority.
+
+**Tradeoffs:**
+- Staff users who are not superusers can no longer access Django admin.
+- Operational tasks needed by teachers must remain available in `/teach`.
+
+**Plan:**
+- Override admin site permission check to require `is_superuser`.
+- Keep teacher portal staff-only.
+- Render `/admin` links in teacher templates only when `request.user.is_superuser`.
+
 ## 2026-02-16 — Keep lesson pages learner-only; move teacher notes to teacher tools
 
 **Why:**

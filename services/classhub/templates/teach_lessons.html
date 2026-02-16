@@ -44,7 +44,9 @@
       <main id="main-content">
         <div class="top heading">
           <div>
-            <div class="muted"><a href="/teach">Teacher</a> · <a href="/admin/">Admin</a></div>
+            <div class="muted">
+              <a href="/teach">Teacher</a>{% if request.user.is_superuser %} · <a href="/admin/">Admin</a>{% endif %}
+            </div>
             <h1>Lesson Tracker</h1>
             <div class="muted">Focus on lesson links and submission progress.</div>
           </div>

@@ -2,6 +2,14 @@ from django.contrib import admin
 from django.urls import path
 from hub import views
 
+
+def _admin_superuser_only(request) -> bool:
+    # Keep teacher portal separate from Django admin.
+    return bool(request.user.is_active and request.user.is_superuser)
+
+
+admin.site.has_permission = _admin_superuser_only
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("healthz", views.healthz),

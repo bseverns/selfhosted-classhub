@@ -52,7 +52,10 @@
       <main id="main-content">
         <div class="top">
           <div>
-            <div class="muted"><a href="/teach">Teacher</a> · <a href="/teach/lessons?class_id={{ classroom.id }}">Lesson tracker</a> · <a href="/admin/">Admin</a></div>
+            <div class="muted">
+              <a href="/teach">Teacher</a> · <a href="/teach/lessons?class_id={{ classroom.id }}">Lesson tracker</a>
+              {% if request.user.is_superuser %} · <a href="/admin/">Admin</a>{% endif %}
+            </div>
             <h1>{{ classroom.name }}</h1>
             <div class="muted">
               Join code <span class="pill">{{ classroom.join_code }}</span>
