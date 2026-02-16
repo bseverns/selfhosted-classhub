@@ -1,6 +1,21 @@
 # Decisions (living)
 
-## 2026-02-16 — Replace display-name auto-rejoin with explicit student return codes
+## 2026-02-16 — Same-device rejoin without return code using signed cookie hints
+
+**Why:**
+- Return-code-only rejoin is secure across devices, but too heavy for fixed classroom machines.
+- Students often rejoin from the same browser after session expiry/logout.
+
+**Tradeoffs:**
+- Same-device rejoin now depends on browser cookie persistence.
+- Shared machines can still reuse identity only when class code + display name match.
+
+**Plan:**
+- Store a signed, HTTP-only device hint cookie after successful join.
+- If `return_code` is omitted, allow same-device rejoin when cookie maps to the same class + display name.
+- Keep return code required for cross-device recovery.
+
+## 2026-02-16 — Replace display-name auto-rejoin with explicit student return codes (amended)
 
 **Why:**
 - Reusing identity by display name enabled accidental or deliberate impersonation in class.
@@ -10,7 +25,7 @@
 - Students now need a short return code to reclaim an existing identity.
 - Entering an invalid return code returns an explicit join error instead of silently creating/reusing records.
 
-**Plan:**
+**Plan (initial):**
 - Add `StudentIdentity.return_code` (unique per class).
 - First join creates a new identity and returns the code.
 - Rejoin only reuses identity when `return_code` matches.

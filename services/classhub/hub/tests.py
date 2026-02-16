@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.utils import timezone
 
 from .models import Class, LessonRelease, Material, Module, StudentIdentity, Submission
@@ -232,11 +232,48 @@ class JoinClassTests(TestCase):
         self.assertEqual(r1.status_code, 200)
         first_id = self.client.session.get("student_id")
 
+        # Simulate different machine/browser (no prior device cookie).
+        other = Client()
+        r2 = other.post("/join", data=json.dumps(payload), content_type="application/json")
+        self.assertEqual(r2.status_code, 200)
+        second_id = other.session.get("student_id")
+
+        self.assertNotEqual(first_id, second_id)
+        self.assertEqual(StudentIdentity.objects.filter(classroom=self.classroom).count(), 2)
+
+    def test_join_same_device_without_return_code_reuses_identity(self):
+        payload = {"class_code": self.classroom.join_code, "display_name": "Ada"}
+        r1 = self.client.post("/join", data=json.dumps(payload), content_type="application/json")
+        self.assertEqual(r1.status_code, 200)
+        first_id = self.client.session.get("student_id")
+
+        # Student logs out, then re-joins from the same browser/device.
+        self.client.get("/logout")
         r2 = self.client.post("/join", data=json.dumps(payload), content_type="application/json")
         self.assertEqual(r2.status_code, 200)
         second_id = self.client.session.get("student_id")
 
+        self.assertEqual(first_id, second_id)
+        self.assertTrue(r2.json().get("rejoined"))
+        self.assertEqual(StudentIdentity.objects.filter(classroom=self.classroom).count(), 1)
+
+    def test_join_same_device_with_different_name_creates_new_identity(self):
+        payload = {"class_code": self.classroom.join_code, "display_name": "Ada"}
+        r1 = self.client.post("/join", data=json.dumps(payload), content_type="application/json")
+        self.assertEqual(r1.status_code, 200)
+        first_id = self.client.session.get("student_id")
+
+        self.client.get("/logout")
+        r2 = self.client.post(
+            "/join",
+            data=json.dumps({"class_code": self.classroom.join_code, "display_name": "Ben"}),
+            content_type="application/json",
+        )
+        self.assertEqual(r2.status_code, 200)
+        second_id = self.client.session.get("student_id")
+
         self.assertNotEqual(first_id, second_id)
+        self.assertFalse(r2.json().get("rejoined"))
         self.assertEqual(StudentIdentity.objects.filter(classroom=self.classroom).count(), 2)
 
     def test_join_reuses_identity_when_return_code_matches(self):

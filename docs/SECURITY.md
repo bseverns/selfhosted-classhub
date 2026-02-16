@@ -8,6 +8,7 @@
 - Ensure `DJANGO_DEBUG=0` in production and do not run the dev override file.
 - Rate limit join + helper endpoints.
 - Helper chat requires either a student classroom session or staff-authenticated teacher session.
+- Same-device student rejoin uses a signed, HTTP-only cookie hint; cross-device recovery still uses return code.
 - Local LLM inference keeps student queries on your infrastructure, but logs and
   prompt storage still require care.
 

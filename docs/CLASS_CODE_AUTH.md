@@ -8,7 +8,9 @@
   - Display name
 - On first join, we create a `StudentIdentity`, issue a short `return_code`, and store
   the student id in the session cookie.
-- Rejoin requires class code + display name + `return_code` to reclaim the same identity.
+- Rejoin from the same browser/device can reclaim identity automatically when class code
+  + display name match a valid signed device hint cookie.
+- Rejoin from a different browser/device requires class code + display name + `return_code`.
 
 ## Recovery
 

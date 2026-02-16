@@ -18,6 +18,8 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.db import models, transaction
 from django.db.utils import OperationalError, ProgrammingError
 from django.core.cache import cache
+from django.core import signing
+from django.core.signing import BadSignature, SignatureExpired
 
 import yaml
 import markdown as md
@@ -463,6 +465,58 @@ def _create_student_identity(classroom: Class, display_name: str) -> StudentIden
     raise RuntimeError("could_not_allocate_unique_student_return_code")
 
 
+def _device_hint_cookie_max_age_seconds() -> int:
+    days = int(getattr(settings, "DEVICE_REJOIN_MAX_AGE_DAYS", 30))
+    return max(days, 1) * 24 * 60 * 60
+
+
+def _load_device_hint_student(request, classroom: Class, display_name: str) -> StudentIdentity | None:
+    cookie_name = getattr(settings, "DEVICE_REJOIN_COOKIE_NAME", "classhub_student_hint")
+    raw = request.COOKIES.get(cookie_name)
+    if not raw:
+        return None
+    try:
+        payload = signing.loads(
+            raw,
+            salt="classhub.student-device-hint",
+            max_age=_device_hint_cookie_max_age_seconds(),
+        )
+    except (BadSignature, SignatureExpired):
+        return None
+
+    try:
+        class_id = int(payload.get("class_id") or 0)
+        student_id = int(payload.get("student_id") or 0)
+    except Exception:
+        return None
+    if class_id != classroom.id or student_id <= 0:
+        return None
+
+    student = (
+        StudentIdentity.objects.filter(id=student_id, classroom=classroom)
+        .order_by("id")
+        .first()
+    )
+    if student is None:
+        return None
+    if student.display_name.strip().casefold() != display_name.strip().casefold():
+        return None
+    return student
+
+
+def _apply_device_hint_cookie(response: JsonResponse, classroom: Class, student: StudentIdentity) -> None:
+    payload = {"class_id": classroom.id, "student_id": student.id}
+    signed = signing.dumps(payload, salt="classhub.student-device-hint")
+    response.set_cookie(
+        getattr(settings, "DEVICE_REJOIN_COOKIE_NAME", "classhub_student_hint"),
+        signed,
+        max_age=_device_hint_cookie_max_age_seconds(),
+        httponly=True,
+        samesite="Lax",
+        secure=not settings.DEBUG,
+    )
+
+
 @require_POST
 def join_class(request):
     """Join via class code + display name.
@@ -470,6 +524,7 @@ def join_class(request):
     Body (JSON): {"class_code": "ABCD1234", "display_name": "Ada", "return_code": "ABC234"}
 
     Stores student identity in session cookie.
+    If return_code is omitted, we may rejoin via signed same-device cookie hint.
     """
     try:
         payload = json.loads(request.body.decode("utf-8"))
@@ -511,6 +566,10 @@ def join_class(request):
             if student.display_name.strip().casefold() != name.strip().casefold():
                 return JsonResponse({"error": "invalid_return_code"}, status=400)
             rejoined = True
+        else:
+            student = _load_device_hint_student(request, classroom, name)
+            if student is not None:
+                rejoined = True
 
         if student is None:
             student = _create_student_identity(classroom, name)
@@ -521,7 +580,9 @@ def join_class(request):
     request.session["student_id"] = student.id
     request.session["class_id"] = classroom.id
 
-    return JsonResponse({"ok": True, "return_code": student.return_code, "rejoined": rejoined})
+    response = JsonResponse({"ok": True, "return_code": student.return_code, "rejoined": rejoined})
+    _apply_device_hint_cookie(response, classroom, student)
+    return response
 
 
 def student_home(request):
