@@ -14,6 +14,7 @@ from django.middleware.csrf import get_token
 from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db import models
+from django.db.utils import OperationalError, ProgrammingError
 
 import yaml
 import markdown as md
@@ -190,11 +191,17 @@ def _title_from_video_filename(filename: str) -> str:
 
 
 def _next_lesson_video_order(course_slug: str, lesson_slug: str) -> int:
-    max_idx = (
-        LessonVideo.objects.filter(course_slug=course_slug, lesson_slug=lesson_slug)
-        .aggregate(models.Max("order_index"))
-        .get("order_index__max")
-    )
+    try:
+        max_idx = (
+            LessonVideo.objects.filter(course_slug=course_slug, lesson_slug=lesson_slug)
+            .aggregate(models.Max("order_index"))
+            .get("order_index__max")
+        )
+    except (OperationalError, ProgrammingError) as exc:
+        # Fail open when schema is behind code deploys; callers can still continue.
+        if "hub_lessonvideo" in str(exc).lower():
+            return 0
+        raise
     return int(max_idx) + 1 if max_idx is not None else 0
 
 
@@ -690,10 +697,15 @@ def _iter_course_lesson_options() -> list[dict]:
 
 
 def _normalize_stored_lesson_videos(course_slug: str, lesson_slug: str) -> list[dict]:
-    rows = list(
-        LessonVideo.objects.filter(course_slug=course_slug, lesson_slug=lesson_slug, is_active=True)
-        .order_by("order_index", "id")
-    )
+    try:
+        rows = list(
+            LessonVideo.objects.filter(course_slug=course_slug, lesson_slug=lesson_slug, is_active=True)
+            .order_by("order_index", "id")
+        )
+    except (OperationalError, ProgrammingError) as exc:
+        if "hub_lessonvideo" in str(exc).lower():
+            return []
+        raise
     normalized = []
     for row in rows:
         url = (row.source_url or "").strip()
@@ -928,7 +940,12 @@ def _stream_file_with_range(request, file_path: Path, content_type: str):
 
 
 def lesson_video_stream(request, video_id: int):
-    video = LessonVideo.objects.filter(id=video_id).first()
+    try:
+        video = LessonVideo.objects.filter(id=video_id).first()
+    except (OperationalError, ProgrammingError) as exc:
+        if "hub_lessonvideo" in str(exc).lower():
+            return HttpResponse("Not found", status=404)
+        raise
     if not video or not video.video_file:
         return HttpResponse("Not found", status=404)
 
@@ -1001,6 +1018,36 @@ def teach_videos(request):
 
     notice = (request.GET.get("notice") or "").strip()
     error = ""
+
+    try:
+        # Early check so missing migration is shown as a clear action item.
+        LessonVideo.objects.only("id").first()
+        lesson_video_table_available = True
+    except (OperationalError, ProgrammingError) as exc:
+        if "hub_lessonvideo" in str(exc).lower():
+            lesson_video_table_available = False
+        else:
+            raise
+
+    if not lesson_video_table_available:
+        class_back_link = f"/teach/class/{class_id}" if class_id else "/teach/lessons"
+        return render(
+            request,
+            "teach_videos.html",
+            {
+                "course_rows": course_rows,
+                "selected_course_slug": selected_course_slug,
+                "selected_lesson_slug": selected_lesson_slug,
+                "lesson_rows": lesson_rows,
+                "lesson_video_rows": [],
+                "published_count": 0,
+                "draft_count": 0,
+                "class_id": class_id,
+                "class_back_link": class_back_link,
+                "notice": notice,
+                "error": "Lesson video table is missing. Run `python manage.py migrate` in `classhub_web`.",
+            },
+        )
 
     if request.method == "POST":
         action = (request.POST.get("action") or "").strip()

@@ -1,5 +1,20 @@
 # Decisions (living)
 
+## 2026-02-16 — Fail-open lesson pages when `LessonVideo` table is missing
+
+**Why:**
+- `LessonVideo` code paths can execute before migration `hub.0002_lessonvideo` is applied.
+- Student lesson pages should not hard-fail due to schema drift.
+
+**Tradeoffs:**
+- Stored lesson videos are temporarily hidden when the table is absent.
+- This safety layer does not replace running migrations.
+
+**Plan:**
+- Catch missing-table DB errors in lesson video read paths.
+- Return lesson pages without DB-backed videos instead of raising `500`.
+- Show a clear migrate action in teacher video management.
+
 ## 2026-02-13 — Self-hosted lesson video library with teacher tagging + accordion playback
 
 **Why:**
