@@ -1,3 +1,14 @@
+"""Main request handlers for the Class Hub service.
+
+This file contains three major request flows:
+1. Public + student flow (`/`, `/join`, `/student`, uploads, lesson pages)
+2. Teacher flow (`/teach/...`, staff-only operational workspace)
+3. Shared content utilities (markdown parsing, release rules, video streaming)
+
+Note: The AI helper endpoints live in the separate `homework_helper` service and
+are reverse-proxied at `/helper/*` by Caddy.
+"""
+
 import json
 import ipaddress
 import mimetypes
@@ -396,8 +407,11 @@ def _normalize_lesson_videos(front_matter: dict) -> list[dict]:
 
 
 def healthz(request):
+    # Used by Caddy/ops checks to confirm the app process is alive.
     return HttpResponse("ok", content_type="text/plain")
 
+
+# --- Public entry + student sign-in/session flow --------------------------------
 
 def index(request):
     """Landing page.
@@ -405,7 +419,7 @@ def index(request):
     - If student session exists, send them to /student
     - Otherwise, show join form
 
-    Teachers/admins can use /admin for now.
+    Teachers/admins sign in at /admin/login/ and then use /teach.
     """
     if getattr(request, "student", None) is not None:
         return redirect("/student")
@@ -527,6 +541,7 @@ def join_class(request):
     Stores student identity in session cookie.
     If return_code is omitted, we may rejoin via signed same-device cookie hint.
     """
+    # Step 1: parse body and apply coarse IP-based join throttling.
     try:
         payload = json.loads(request.body.decode("utf-8"))
     except Exception:
@@ -554,6 +569,10 @@ def join_class(request):
         # Serialize joins per class so return-code assignment and lookup stay deterministic.
         Class.objects.select_for_update().filter(id=classroom.id).first()
 
+        # Step 2: resolve student identity in priority order:
+        # - explicit return code (cross-device recovery)
+        # - signed same-device cookie hint (same machine/browser rejoin)
+        # - otherwise create a new student identity
         student = None
         rejoined = False
         if return_code:
@@ -578,13 +597,17 @@ def join_class(request):
         student.last_seen_at = timezone.now()
         student.save(update_fields=["last_seen_at"])
 
+    # Step 3: persist resolved student identity into Django session.
     request.session["student_id"] = student.id
     request.session["class_id"] = classroom.id
 
+    # Step 4: return student return code and refresh same-device hint cookie.
     response = JsonResponse({"ok": True, "return_code": student.return_code, "rejoined": rejoined})
     _apply_device_hint_cookie(response, classroom, student)
     return response
 
+
+# --- Student classroom + lesson/content flow ------------------------------------
 
 def student_home(request):
     if getattr(request, "student", None) is None or getattr(request, "classroom", None) is None:
@@ -636,6 +659,9 @@ def student_home(request):
         lesson_release_cache[key] = state
         return state
 
+    # Build per-material lock/access state and per-student submission status so
+    # the student dashboard can render "open vs locked" and "submitted vs missing"
+    # without extra client-side calls.
     # Submission status for this student (shown next to upload materials)
     material_ids = []
     material_access = {}
@@ -792,6 +818,11 @@ def _lesson_release_state(
     override_map: dict[tuple[str, str], LessonRelease] | None = None,
     respect_staff_bypass: bool = True,
 ) -> dict:
+    # Determine final lesson access for this request.
+    # Decision order:
+    # 1) Base date from course content front matter.
+    # 2) Optional per-class override row (force lock/date/open).
+    # 3) Optional staff bypass for teacher-facing views.
     base_available_on = _lesson_available_on(front_matter, lesson_meta)
     effective_available_on = base_available_on
     mode = "default"
@@ -846,6 +877,7 @@ def _lesson_release_state(
 
 
 def _safe_teacher_return_path(raw: str, fallback: str) -> str:
+    # Prevent open redirects: only allow local /teach paths.
     parsed = urlparse((raw or "").strip())
     if parsed.scheme or parsed.netloc:
         return fallback
@@ -967,6 +999,8 @@ def material_upload(request, material_id: int):
     if material.type != Material.TYPE_UPLOAD:
         return HttpResponse("Not an upload material", status=404)
 
+    # Upload access is tied to lesson release status.
+    # We infer this by finding the module's lesson link and applying release rules.
     release_state = {"is_locked": False, "available_on": None}
     module_mats = list(material.module.materials.all())
     module_mats.sort(key=lambda m: (m.order_index, m.id))
@@ -997,6 +1031,7 @@ def material_upload(request, material_id: int):
     error = ""
     response_status = 200
 
+    # If lesson is still locked, GET shows message and POST is rejected (403).
     if release_state.get("is_locked"):
         available_on = release_state.get("available_on")
         if available_on:
@@ -1006,6 +1041,10 @@ def material_upload(request, material_id: int):
         if request.method == "POST":
             response_status = 403
     elif request.method == "POST":
+        # Upload validation order:
+        # 1) extension allowlist
+        # 2) file size cap
+        # 3) persist submission row + file
         form = SubmissionUploadForm(request.POST, request.FILES)
         if form.is_valid():
             f = form.cleaned_data["file"]
@@ -1085,10 +1124,14 @@ def student_logout(request):
 
 
 def teacher_logout(request):
+    # Teacher/admin auth uses Django auth session, so call auth_logout first.
     auth_logout(request)
+    # Also flush generic session keys to keep student and staff states cleanly separate.
     request.session.flush()
     return redirect("/admin/login/")
 
+
+# --- Course markdown render flow -------------------------------------------------
 
 def course_overview(request, course_slug: str):
     """Tiny course landing page.
@@ -1137,6 +1180,7 @@ def course_lesson(request, course_slug: str, lesson_slug: str):
     lesson_locked = bool(release_state.get("is_locked"))
     lesson_available_on = release_state.get("available_on")
 
+    # Before release date, students only get intro content (not full lesson body).
     if lesson_locked:
         learner_body_md = _intro_only_markdown(learner_body_md)
 
@@ -1187,6 +1231,7 @@ def course_lesson(request, course_slug: str, lesson_slug: str):
         getattr(request, "student", None) is not None
         or (request.user.is_authenticated and request.user.is_staff)
     )
+    # Helper appears only when lesson is open and user has classroom/staff context.
     if not lesson_locked and can_use_helper:
         get_token(request)
         helper_widget = render_to_string(
@@ -1354,6 +1399,7 @@ def _build_lesson_tracker_rows(request, classroom_id: int, modules: list[Module]
     lesson_release_by_lesson: dict[tuple[str, str], dict] = {}
     release_override_map = _lesson_release_override_map(classroom_id)
 
+    # Pass 1: gather module materials and upload material ids.
     for module in modules:
         mats = list(module.materials.all())
         mats.sort(key=lambda m: (m.order_index, m.id))
@@ -1365,6 +1411,7 @@ def _build_lesson_tracker_rows(request, classroom_id: int, modules: list[Module]
     submission_counts = _material_submission_counts(upload_material_ids)
     latest_upload_map = _material_latest_upload_map(upload_material_ids)
 
+    # Pass 2: build one row per detected lesson link, with submission coverage.
     for module in modules:
         mats = module_materials_map.get(module.id, [])
         dropboxes = []
@@ -1410,6 +1457,8 @@ def _build_lesson_tracker_rows(request, classroom_id: int, modules: list[Module]
             seen_lessons.add(lesson_key)
             course_slug, lesson_slug = parsed
 
+            # Load lesson metadata once per unique lesson key to avoid duplicate
+            # markdown parsing when the same lesson appears in multiple places.
             if lesson_key not in teacher_material_html_by_lesson:
                 teacher_material_html_by_lesson[lesson_key] = _load_teacher_material_html(course_slug, lesson_slug)
                 try:
@@ -1458,6 +1507,7 @@ def _request_can_view_lesson_video(request) -> bool:
 
 
 def _stream_file_with_range(request, file_path: Path, content_type: str):
+    # Supports HTTP byte-range requests for seekable video playback.
     file_size = file_path.stat().st_size
     range_header = request.headers.get("Range") or request.META.get("HTTP_RANGE", "")
     if not range_header:
@@ -1561,8 +1611,11 @@ def _lesson_video_redirect_params(course_slug: str, lesson_slug: str, class_id: 
     return urlencode(query)
 
 
+# --- Teacher portal flow (staff-only) -------------------------------------------
+
 @staff_member_required
 def teach_videos(request):
+    # Staff-only video library manager for lesson-tagged media.
     try:
         class_id = int((request.GET.get("class_id") or request.POST.get("class_id") or "0").strip())
     except Exception:
@@ -1843,6 +1896,8 @@ def teach_lessons(request):
 @staff_member_required
 @require_POST
 def teach_set_lesson_release(request):
+    # Mutates per-class release overrides from teacher UI actions.
+    # Allowed actions: set_date, toggle_lock, unlock_now, reset_default.
     try:
         class_id = int((request.POST.get("class_id") or "0").strip())
     except Exception:
@@ -1935,7 +1990,7 @@ def teach_create_class(request):
     if not name:
         return redirect("/teach")
 
-    # join_code must be unique
+    # join_code must be unique; retry a few times in the unlikely collision case.
     join_code = gen_class_code()
     for _ in range(10):
         if not Class.objects.filter(join_code=join_code).exists():
@@ -2014,6 +2069,7 @@ def teach_rotate_code(request, class_id: int):
     if not classroom:
         return HttpResponse("Not found", status=404)
 
+    # Code rotation is an operational reset when a class code has leaked.
     join_code = gen_class_code()
     for _ in range(10):
         if not Class.objects.filter(join_code=join_code).exists():
@@ -2196,7 +2252,8 @@ def teach_material_submissions(request, material_id: int):
     show = (request.GET.get("show") or "all").strip()
 
     if request.GET.get("download") == "zip_latest":
-        # Build a zip of latest submissions for each student.
+        # Build one ZIP containing the latest submission per student.
+        # Folder format in ZIP: <student_display_name>/<original_filename>
         tmp = tempfile.NamedTemporaryFile(prefix="classhub_latest_", suffix=".zip", delete=False)
         tmp_path = tmp.name
         tmp.close()

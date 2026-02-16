@@ -33,6 +33,13 @@ def gen_student_return_code(length: int = 6) -> str:
 
 
 class Class(models.Model):
+    """A classroom roster with one join code.
+
+    Non-technical framing:
+    - Think of this as one class period/section.
+    - `is_locked=True` temporarily blocks new student joins.
+    """
+
     name = models.CharField(max_length=200)
     join_code = models.CharField(max_length=16, unique=True, default=gen_class_code)
     is_locked = models.BooleanField(default=False)
@@ -42,6 +49,8 @@ class Class(models.Model):
 
 
 class Module(models.Model):
+    """An ordered group of materials (usually one lesson/session)."""
+
     classroom = models.ForeignKey(Class, on_delete=models.CASCADE, related_name="modules")
     title = models.CharField(max_length=200)
     order_index = models.PositiveIntegerField(default=0)
@@ -54,6 +63,14 @@ class Module(models.Model):
 
 
 class Material(models.Model):
+    """A single item shown to students inside a module.
+
+    Types:
+    - link: points to lesson/content URL
+    - text: short instructions/reminders
+    - upload: student dropbox for file submission
+    """
+
     TYPE_LINK = "link"
     TYPE_TEXT = "text"
     TYPE_UPLOAD = "upload"
@@ -132,12 +149,14 @@ class StudentIdentity(models.Model):
     last_seen_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
+        # Return code only needs to be unique inside one class.
         constraints = [
             models.UniqueConstraint(
                 fields=["classroom", "return_code"],
                 name="uniq_student_return_code_per_class",
             ),
         ]
+        # Speeds up joins/searches by class + display name/return code.
         indexes = [
             models.Index(fields=["classroom", "display_name"]),
             models.Index(fields=["classroom", "return_code"]),
@@ -160,6 +179,8 @@ def _lesson_video_upload_to(instance: "LessonVideo", filename: str) -> str:
 
 
 class LessonVideo(models.Model):
+    """Teacher-managed video asset tagged to one course lesson."""
+
     course_slug = models.SlugField(max_length=120)
     lesson_slug = models.SlugField(max_length=120)
     title = models.CharField(max_length=200)
@@ -183,7 +204,13 @@ class LessonVideo(models.Model):
 
 
 class LessonRelease(models.Model):
-    """Per-class release overrides for lesson availability."""
+    """Per-class release overrides for lesson availability.
+
+    Priority:
+    - `force_locked=True` always locks
+    - else `available_on` can schedule open date
+    - else lesson uses markdown/content defaults
+    """
 
     classroom = models.ForeignKey(Class, on_delete=models.CASCADE, related_name="lesson_releases")
     course_slug = models.SlugField(max_length=120)

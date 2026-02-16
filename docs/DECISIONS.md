@@ -1,5 +1,65 @@
 # Decisions (living)
 
+## 2026-02-16 — Add plain-English structure comments in core Class Hub code files
+
+**Why:**
+- Non-programmer staff need to understand request flow and ownership boundaries quickly during demos and support.
+- Variable names alone do not explain "where traffic goes" and "which route is for whom."
+
+**Tradeoffs:**
+- More comments means a small maintenance cost when routes or auth flow change.
+
+**Plan:**
+- Add high-level flow comments in:
+  - `services/classhub/config/urls.py`
+  - `services/classhub/hub/middleware.py`
+  - `services/classhub/hub/views.py`
+- Keep these as comment-only changes (no behavior changes).
+
+## 2026-02-16 — Expand documentary comments in settings/models/release logic
+
+**Why:**
+- Team handoff requires context that explains operational intent (not just variable names).
+- Office staff need a literal map of "what this switch/route/model does" during support.
+
+**Tradeoffs:**
+- Slightly larger source files and a small ongoing comment-maintenance burden.
+
+**Plan:**
+- Add plain-English comments in:
+  - `services/classhub/config/settings.py`
+  - `services/classhub/hub/models.py`
+  - `services/classhub/hub/views.py` (release, upload, teacher actions)
+- Keep these as comment-only/documentation changes.
+
+## 2026-02-16 — Add explicit “Done for now” cues in student class views
+
+**Why:**
+- Students and non-technical staff need a clear visual definition of completion.
+- “Upload exists” was visible but not explicit as a completion signal.
+
+**Tradeoffs:**
+- “Done for now” means at least one upload exists; it is not rubric-graded completion.
+
+**Plan:**
+- Add a small status legend in student class view.
+- Show `Done for now` badge when a student has at least one submission for a dropbox.
+- Mirror that cue on lesson dropbox and upload pages.
+
+## 2026-02-16 — Add plain-language What/Where/Why guide for non-programmer staff
+
+**Why:**
+- Existing docs are strong for engineering/operations but harder for non-technical coworkers.
+- Demo support and day-to-day handoff improve when one plain-language entry point exists.
+
+**Tradeoffs:**
+- Adds one more doc to keep current as routes and workflows evolve.
+- Some overlap with teacher/runbook docs is intentional to reduce confusion.
+
+**Plan:**
+- Add `docs/WHAT_WHERE_WHY.md` with URL map, role map, quick checklist, and troubleshooting.
+- Link this guide from `README.md` so it is easy to find.
+
 ## 2026-02-16 — Add explicit teacher logout route and simplify admin login UI
 
 **Why:**

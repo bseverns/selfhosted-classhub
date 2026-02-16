@@ -1,3 +1,13 @@
+"""Top-level URL map for the Class Hub Django service.
+
+Plain-language map:
+- `/` + `/join` + `/student` are the learner flow.
+- `/teach/...` is the teacher/staff workspace.
+- `/admin/...` is the Django admin surface (superusers only here).
+- `/helper/...` is intentionally NOT in this file; Caddy routes it to the
+  separate Homework Helper service.
+"""
+
 from django.contrib import admin
 from django.urls import path
 from hub import views
@@ -15,25 +25,28 @@ admin.site.index_title = "createMPLS Course Admin"
 admin.site.enable_nav_sidebar = False
 
 urlpatterns = [
+    # Admin surface (operations/configuration). Kept separate from daily teaching UI.
     path("admin/", admin.site.urls),
+
+    # Health endpoint for reverse proxy and uptime checks.
     path("healthz", views.healthz),
 
-    # Student flow
+    # Student flow (class-code login and classroom page).
     path("", views.index),
     path("join", views.join_class),
     path("student", views.student_home),
     path("logout", views.student_logout),
 
-    # Upload dropbox
+    # Student upload + shared download/stream routes.
     path("material/<int:material_id>/upload", views.material_upload),
     path("submission/<int:submission_id>/download", views.submission_download),
     path("lesson-video/<int:video_id>/stream", views.lesson_video_stream),
 
-    # Repo-authored course content (markdown)
+    # Repo-authored course content pages (markdown rendered to HTML).
     path("course/<slug:course_slug>", views.course_overview),
     path("course/<slug:course_slug>/<slug:lesson_slug>", views.course_lesson),
 
-    # Teacher cockpit (staff-only)
+    # Teacher cockpit (staff-only, outside Django admin).
     path("teach", views.teach_home),
     path("teach/logout", views.teacher_logout),
     path("teach/lessons", views.teach_lessons),

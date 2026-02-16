@@ -120,6 +120,7 @@ By default, the helper is configured to use a local Ollama server. See:
 See:
 - `docs/DAY1_DEPLOY_CHECKLIST.md`
 - `docs/BOOTSTRAP_SERVER.md`
+- `docs/WHAT_WHERE_WHY.md` (plain-language guide for non-programmer staff)
 
 Note: Production should **not** load the dev override file. Use
 `docker compose -f docker-compose.yml up -d --build` or remove the override.

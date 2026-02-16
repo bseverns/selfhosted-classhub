@@ -39,6 +39,23 @@
       .empty-state {
         margin-top: 10px;
       }
+      .done-guide {
+        margin-top: 12px;
+        border: 1px solid rgba(22, 59, 80, 0.14);
+        border-radius: 12px;
+        padding: 12px;
+        background: rgba(255, 255, 255, 0.45);
+      }
+      .done-guide h2 {
+        margin: 0 0 8px 0;
+        font-size: 1rem;
+      }
+      .done-guide p {
+        margin: 0 0 6px 0;
+      }
+      .done-guide p:last-child {
+        margin-bottom: 0;
+      }
     </style>
   </head>
   <body class="glass-theme">
@@ -56,6 +73,13 @@
           <div>
             <a class="muted" href="/logout">Log out</a>
           </div>
+        </div>
+
+        <div class="card done-guide">
+          <h2>How to tell you are done</h2>
+          <p class="muted"><span class="state-pill state-pill--done">Done for now</span> means your upload is saved and visible.</p>
+          <p class="muted"><span class="state-pill state-pill--open">Open</span> means you can work/submit now.</p>
+          <p class="muted"><span class="state-pill state-pill--locked">Locked</span> means wait until the listed date.</p>
         </div>
 
         {% if modules %}
@@ -102,6 +126,13 @@
                         {% if access.is_lesson_upload and access.is_locked %}
                           <div class="muted">Submissions open on <strong>{{ access.available_on|date:"M j, Y" }}</strong>.</div>
                         {% else %}
+                          <div class="status-row">
+                            {% if s %}
+                              <span class="state-pill state-pill--done">Done for now</span>
+                            {% else %}
+                              <span class="state-pill state-pill--open">Not submitted yet</span>
+                            {% endif %}
+                          </div>
                           <div class="mat-link">
                             <a href="/material/{{ mat.id }}/upload">Upload / view submissions</a>
                             {% if s %}

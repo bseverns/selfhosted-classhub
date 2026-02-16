@@ -226,9 +226,7 @@
         {% if not lesson_locked and lesson_submission.type == "file" %}
           <div class="card">
             <h2 style="margin-top:0;">Homework dropbox</h2>
-            <p class="muted" style="margin-top:8px;">
-              <span class="state-pill state-pill--open">Submissions open</span>
-            </p>
+            <p class="muted" style="margin-top:8px;"><span class="state-pill state-pill--open">Submissions open</span></p>
             <p class="muted" style="margin-top:8px;">
               {% if lesson_submission.accepted_exts %}
                 Accepted: <strong>{{ lesson_submission.accepted_exts|join:", " }}</strong>
@@ -241,6 +239,13 @@
             </p>
 
             {% if student and lesson_upload_material %}
+              <p class="muted" style="margin:8px 0 0 0;">
+                {% if lesson_upload_status %}
+                  <span class="state-pill state-pill--done">Done for now</span> Your file is saved. Re-upload if you need to replace it.
+                {% else %}
+                  <span class="state-pill state-pill--open">Not submitted yet</span> You are done when at least one upload appears below.
+                {% endif %}
+              </p>
               <div class="nav" style="margin-top:8px;">
                 <a class="btn" href="/material/{{ lesson_upload_material.id }}/upload">Open dropbox</a>
                 {% if lesson_upload_status %}
