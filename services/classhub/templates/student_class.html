@@ -104,10 +104,9 @@
           </div>
         {% endif %}
 
-        {% include "includes/helper_widget.html"
-          with helper_description="This is a Day-1 wire-up. It will become smarter once it can cite your class materials."
-          helper_context="Classroom summary: "|add:classroom.name
-          helper_topics="Classroom overview" %}
+        {% if helper_widget %}
+          {{ helper_widget|safe }}
+        {% endif %}
       </main>
     </div>
   </body>

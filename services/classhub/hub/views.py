@@ -519,6 +519,18 @@ def student_home(request):
                 submissions_by_material[s.material_id] = {"count": 0, "last": s.uploaded_at, "last_id": s.id}
             submissions_by_material[s.material_id]["count"] += 1
 
+    helper_widget = render_to_string(
+        "includes/helper_widget.html",
+        {
+            "helper_title": "Class helper",
+            "helper_description": "This is a Day-1 wire-up. It will become smarter once it can cite your class materials.",
+            "helper_context": f"Classroom summary: {classroom.name}",
+            "helper_topics": "Classroom overview",
+            "helper_reference": "",
+            "helper_allowed_topics": "",
+        },
+    )
+
     return render(
         request,
         "student_class.html",
@@ -528,6 +540,7 @@ def student_home(request):
             "modules": modules,
             "submissions_by_material": submissions_by_material,
             "material_access": material_access,
+            "helper_widget": helper_widget,
         },
     )
 
