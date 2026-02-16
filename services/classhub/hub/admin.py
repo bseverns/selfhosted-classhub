@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 
-from .models import Class, Module, Material, StudentIdentity, Submission, LessonVideo
+from .models import Class, Module, Material, StudentIdentity, Submission, LessonRelease, LessonVideo
 
 @admin.register(Class)
 class ClassAdmin(admin.ModelAdmin):
@@ -44,3 +44,10 @@ class LessonVideoAdmin(admin.ModelAdmin):
     list_display = ("title", "course_slug", "lesson_slug", "order_index", "is_active", "updated_at")
     list_filter = ("course_slug", "lesson_slug", "is_active")
     search_fields = ("title", "course_slug", "lesson_slug", "source_url")
+
+
+@admin.register(LessonRelease)
+class LessonReleaseAdmin(admin.ModelAdmin):
+    list_display = ("classroom", "course_slug", "lesson_slug", "available_on", "force_locked", "updated_at")
+    list_filter = ("classroom", "course_slug", "force_locked")
+    search_fields = ("classroom__name", "classroom__join_code", "course_slug", "lesson_slug")

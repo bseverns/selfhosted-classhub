@@ -158,3 +158,30 @@ class LessonVideo(models.Model):
 
     def __str__(self) -> str:
         return f"{self.course_slug}/{self.lesson_slug}: {self.title}"
+
+
+class LessonRelease(models.Model):
+    """Per-class release overrides for lesson availability."""
+
+    classroom = models.ForeignKey(Class, on_delete=models.CASCADE, related_name="lesson_releases")
+    course_slug = models.SlugField(max_length=120)
+    lesson_slug = models.SlugField(max_length=120)
+    # If set, students are locked until this date in the classroom.
+    available_on = models.DateField(blank=True, null=True)
+    # Hard lock regardless of date (until toggled off by teacher/admin).
+    force_locked = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["classroom", "course_slug", "lesson_slug"],
+                name="uniq_lesson_release_per_class_lesson",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["classroom", "course_slug", "lesson_slug"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.classroom.join_code}:{self.course_slug}/{self.lesson_slug}"

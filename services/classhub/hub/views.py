@@ -3,6 +3,7 @@ import mimetypes
 import re
 import tempfile
 import zipfile
+from datetime import date
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse
 from django.http import FileResponse, HttpResponse, JsonResponse, StreamingHttpResponse
@@ -21,7 +22,7 @@ import markdown as md
 import bleach
 
 from .forms import SubmissionUploadForm
-from .models import Class, LessonVideo, Module, Material, StudentIdentity, Submission, gen_class_code
+from .models import Class, LessonRelease, LessonVideo, Module, Material, StudentIdentity, Submission, gen_class_code
 
 
 # --- Repo-authored course content (markdown) ---------------------------------
@@ -442,12 +443,69 @@ def student_home(request):
 
     classroom = request.classroom
     modules = classroom.modules.prefetch_related("materials").all()
+    lesson_release_cache: dict[tuple[str, str], dict] = {}
+    module_lesson_cache: dict[int, tuple[str, str] | None] = {}
+    release_override_map = _lesson_release_override_map(classroom.id)
+
+    def _get_module_lesson(module: Module) -> tuple[str, str] | None:
+        if module.id in module_lesson_cache:
+            return module_lesson_cache[module.id]
+        mats = list(module.materials.all())
+        mats.sort(key=lambda m: (m.order_index, m.id))
+        for mat in mats:
+            if mat.type != Material.TYPE_LINK:
+                continue
+            parsed = _parse_course_lesson_url(mat.url)
+            if parsed:
+                module_lesson_cache[module.id] = parsed
+                return parsed
+        module_lesson_cache[module.id] = None
+        return None
+
+    def _get_release_state(course_slug: str, lesson_slug: str) -> dict:
+        key = (course_slug, lesson_slug)
+        if key in lesson_release_cache:
+            return lesson_release_cache[key]
+        try:
+            front_matter, _body, lesson_meta = _load_lesson_markdown(course_slug, lesson_slug)
+        except ValueError:
+            front_matter = {}
+            lesson_meta = {}
+        state = _lesson_release_state(
+            request,
+            front_matter,
+            lesson_meta,
+            classroom_id=classroom.id,
+            course_slug=course_slug,
+            lesson_slug=lesson_slug,
+            override_map=release_override_map,
+        )
+        lesson_release_cache[key] = state
+        return state
 
     # Submission status for this student (shown next to upload materials)
     material_ids = []
+    material_access = {}
     for m in modules:
+        module_lesson = _get_module_lesson(m)
         for mat in m.materials.all():
             material_ids.append(mat.id)
+            access = {"is_locked": False, "available_on": None, "is_lesson_link": False, "is_lesson_upload": False}
+
+            if mat.type == Material.TYPE_LINK:
+                parsed = _parse_course_lesson_url(mat.url)
+                if parsed:
+                    state = _get_release_state(*parsed)
+                    access["is_lesson_link"] = True
+                    access["is_locked"] = bool(state.get("is_locked"))
+                    access["available_on"] = state.get("available_on")
+            elif mat.type == Material.TYPE_UPLOAD and module_lesson:
+                state = _get_release_state(*module_lesson)
+                access["is_lesson_upload"] = True
+                access["is_locked"] = bool(state.get("is_locked"))
+                access["available_on"] = state.get("available_on")
+
+            material_access[mat.id] = access
 
     submissions_by_material = {}
     if material_ids:
@@ -469,6 +527,7 @@ def student_home(request):
             "classroom": classroom,
             "modules": modules,
             "submissions_by_material": submissions_by_material,
+            "material_access": material_access,
         },
     )
 
@@ -510,6 +569,147 @@ def _front_matter_submission(front_matter: dict) -> dict:
             accepted_exts.append(ext)
 
     return {"type": sub_type, "accepted_exts": accepted_exts, "naming": naming}
+
+
+def _parse_release_date(raw) -> date | None:
+    if raw is None:
+        return None
+    if isinstance(raw, date):
+        return raw
+    text = str(raw).strip()
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def _lesson_available_on(front_matter: dict, lesson_meta: dict) -> date | None:
+    if isinstance(front_matter, dict):
+        for key in ("available_on", "release_date", "opens_on"):
+            parsed = _parse_release_date(front_matter.get(key))
+            if parsed is not None:
+                return parsed
+    if isinstance(lesson_meta, dict):
+        for key in ("available_on", "release_date", "opens_on"):
+            parsed = _parse_release_date(lesson_meta.get(key))
+            if parsed is not None:
+                return parsed
+    return None
+
+
+def _request_can_bypass_lesson_release(request) -> bool:
+    return bool(request.user.is_authenticated and request.user.is_staff)
+
+
+def _lesson_release_override_map(classroom_id: int) -> dict[tuple[str, str], LessonRelease]:
+    if not classroom_id:
+        return {}
+    try:
+        rows = LessonRelease.objects.filter(classroom_id=classroom_id).all()
+    except (OperationalError, ProgrammingError) as exc:
+        if "hub_lessonrelease" in str(exc).lower():
+            return {}
+        raise
+    return {(row.course_slug, row.lesson_slug): row for row in rows}
+
+
+def _lesson_release_state(
+    request,
+    front_matter: dict,
+    lesson_meta: dict,
+    classroom_id: int = 0,
+    course_slug: str = "",
+    lesson_slug: str = "",
+    override_map: dict[tuple[str, str], LessonRelease] | None = None,
+    respect_staff_bypass: bool = True,
+) -> dict:
+    base_available_on = _lesson_available_on(front_matter, lesson_meta)
+    effective_available_on = base_available_on
+    mode = "default"
+
+    override = None
+    if classroom_id and course_slug and lesson_slug:
+        key = (course_slug, lesson_slug)
+        if override_map is not None:
+            override = override_map.get(key)
+        else:
+            try:
+                override = LessonRelease.objects.filter(
+                    classroom_id=classroom_id,
+                    course_slug=course_slug,
+                    lesson_slug=lesson_slug,
+                ).first()
+            except (OperationalError, ProgrammingError) as exc:
+                if "hub_lessonrelease" in str(exc).lower():
+                    override = None
+                else:
+                    raise
+
+    if override:
+        if override.force_locked:
+            mode = "forced_locked"
+            if override.available_on is not None:
+                effective_available_on = override.available_on
+            is_locked = True
+        elif override.available_on is not None:
+            mode = "scheduled_override"
+            effective_available_on = override.available_on
+            is_locked = timezone.localdate() < effective_available_on
+        else:
+            mode = "forced_open"
+            effective_available_on = None
+            is_locked = False
+    else:
+        is_locked = bool(effective_available_on and timezone.localdate() < effective_available_on)
+
+    if respect_staff_bypass and _request_can_bypass_lesson_release(request):
+        is_locked = False
+
+    return {
+        "available_on": effective_available_on,
+        "is_locked": is_locked,
+        "base_available_on": base_available_on,
+        "has_override": bool(override),
+        "override_available_on": override.available_on if override else None,
+        "override_force_locked": bool(override.force_locked) if override else False,
+        "mode": mode,
+    }
+
+
+def _safe_teacher_return_path(raw: str, fallback: str) -> str:
+    parsed = urlparse((raw or "").strip())
+    if parsed.scheme or parsed.netloc:
+        return fallback
+    if not parsed.path.startswith("/teach"):
+        return fallback
+    return (raw or "").strip() or fallback
+
+
+def _with_notice(path: str, notice: str = "", error: str = "") -> str:
+    params = {}
+    if notice:
+        params["notice"] = notice
+    if error:
+        params["error"] = error
+    if not params:
+        return path
+    sep = "&" if "?" in path else "?"
+    return f"{path}{sep}{urlencode(params)}"
+
+
+def _intro_only_markdown(learner_markdown: str) -> str:
+    lines = learner_markdown.splitlines()
+    collected: list[str] = []
+    for line in lines:
+        if line.startswith("## "):
+            break
+        collected.append(line)
+    intro = "\n".join(collected).strip()
+    if intro:
+        return intro + "\n"
+    return "### Intro\nYour teacher will open the full lesson on the scheduled date.\n"
 
 
 def _find_lesson_upload_material(classroom_id: int, course_slug: str, lesson_slug: str):
@@ -600,12 +800,45 @@ def material_upload(request, material_id: int):
     if material.type != Material.TYPE_UPLOAD:
         return HttpResponse("Not an upload material", status=404)
 
+    release_state = {"is_locked": False, "available_on": None}
+    module_mats = list(material.module.materials.all())
+    module_mats.sort(key=lambda m: (m.order_index, m.id))
+    for candidate in module_mats:
+        if candidate.type != Material.TYPE_LINK:
+            continue
+        parsed = _parse_course_lesson_url(candidate.url)
+        if not parsed:
+            continue
+        try:
+            front_matter, _body, lesson_meta = _load_lesson_markdown(parsed[0], parsed[1])
+        except ValueError:
+            front_matter = {}
+            lesson_meta = {}
+        release_state = _lesson_release_state(
+            request,
+            front_matter,
+            lesson_meta,
+            classroom_id=material.module.classroom_id,
+            course_slug=parsed[0],
+            lesson_slug=parsed[1],
+        )
+        break
+
     allowed_exts = _parse_extensions(material.accepted_extensions) or [".sb3"]
     max_bytes = int(material.max_upload_mb) * 1024 * 1024
 
     error = ""
+    response_status = 200
 
-    if request.method == "POST":
+    if release_state.get("is_locked"):
+        available_on = release_state.get("available_on")
+        if available_on:
+            error = f"Submissions for this lesson open on {available_on.isoformat()}."
+        else:
+            error = "Submissions for this lesson are not open yet."
+        if request.method == "POST":
+            response_status = 403
+    elif request.method == "POST":
         form = SubmissionUploadForm(request.POST, request.FILES)
         if form.is_valid():
             f = form.cleaned_data["file"]
@@ -644,7 +877,10 @@ def material_upload(request, material_id: int):
             "form": form,
             "error": error,
             "submissions": submissions,
+            "upload_locked": bool(release_state.get("is_locked")),
+            "upload_available_on": release_state.get("available_on"),
         },
+        status=response_status,
     )
 
 
@@ -716,11 +952,28 @@ def course_lesson(request, course_slug: str, lesson_slug: str):
         return HttpResponse("Lesson not found", status=404)
 
     learner_body_md, _teacher_body_md = _split_lesson_markdown_for_audiences(body_md)
+    classroom_id = getattr(getattr(request, "classroom", None), "id", 0) or 0
+    release_state = _lesson_release_state(
+        request,
+        fm,
+        lesson_meta,
+        classroom_id=classroom_id,
+        course_slug=course_slug,
+        lesson_slug=lesson_slug,
+    )
+    lesson_locked = bool(release_state.get("is_locked"))
+    lesson_available_on = release_state.get("available_on")
+
+    if lesson_locked:
+        learner_body_md = _intro_only_markdown(learner_body_md)
+
     if not learner_body_md.strip():
         learner_body_md = "### Learner activity\nAsk your teacher for today's activity steps.\n"
     html = _render_markdown_to_safe_html(learner_body_md)
     lesson_videos = _normalize_lesson_videos(fm)
     lesson_videos.extend(_normalize_stored_lesson_videos(course_slug, lesson_slug))
+    if lesson_locked:
+        lesson_videos = []
 
     lessons = manifest.get("lessons") or []
     idx = next((i for i, l in enumerate(lessons) if l.get("slug") == lesson_slug), None)
@@ -735,6 +988,8 @@ def course_lesson(request, course_slug: str, lesson_slug: str):
     lesson_upload_status = {}
 
     if (
+        not lesson_locked
+        and
         lesson_submission.get("type") == "file"
         and getattr(request, "student", None) is not None
         and getattr(request, "classroom", None) is not None
@@ -754,17 +1009,19 @@ def course_lesson(request, course_slug: str, lesson_slug: str):
                 }
 
     helper_reference = lesson_meta.get("helper_reference") or manifest.get("helper_reference") or ""
-    helper_widget = render_to_string(
-        "includes/helper_widget.html",
-        {
-            "helper_title": "Lesson helper",
-            "helper_description": "Need a hint for this lesson? Ask the helper to guide you without handing out answers.",
-            "helper_context": helper_context,
-            "helper_topics": " | ".join(helper_topics),
-            "helper_reference": helper_reference,
-            "helper_allowed_topics": " | ".join(helper_allowed_topics),
-        },
-    )
+    helper_widget = ""
+    if not lesson_locked:
+        helper_widget = render_to_string(
+            "includes/helper_widget.html",
+            {
+                "helper_title": "Lesson helper",
+                "helper_description": "Need a hint for this lesson? Ask the helper to guide you without handing out answers.",
+                "helper_context": helper_context,
+                "helper_topics": " | ".join(helper_topics),
+                "helper_reference": helper_reference,
+                "helper_allowed_topics": " | ".join(helper_allowed_topics),
+            },
+        )
 
     return render(
         request,
@@ -784,6 +1041,8 @@ def course_lesson(request, course_slug: str, lesson_slug: str):
             "lesson_submission": lesson_submission,
             "lesson_upload_material": lesson_upload_material,
             "lesson_upload_status": lesson_upload_status,
+            "lesson_locked": lesson_locked,
+            "lesson_available_on": lesson_available_on,
         },
     )
 
@@ -908,12 +1167,14 @@ def _material_latest_upload_map(material_ids: list[int]) -> dict[int, timezone.d
     return latest
 
 
-def _build_lesson_tracker_rows(modules: list[Module], student_count: int) -> list[dict]:
+def _build_lesson_tracker_rows(request, classroom_id: int, modules: list[Module], student_count: int) -> list[dict]:
     rows: list[dict] = []
     upload_material_ids = []
     module_materials_map: dict[int, list[Material]] = {}
     teacher_material_html_by_lesson: dict[tuple[str, str], str] = {}
     lesson_title_by_lesson: dict[tuple[str, str], str] = {}
+    lesson_release_by_lesson: dict[tuple[str, str], dict] = {}
+    release_override_map = _lesson_release_override_map(classroom_id)
 
     for module in modules:
         mats = list(module.materials.all())
@@ -974,11 +1235,22 @@ def _build_lesson_tracker_rows(modules: list[Module], student_count: int) -> lis
             if lesson_key not in teacher_material_html_by_lesson:
                 teacher_material_html_by_lesson[lesson_key] = _load_teacher_material_html(course_slug, lesson_slug)
                 try:
-                    front_matter, _body_markdown, _lesson_meta = _load_lesson_markdown(course_slug, lesson_slug)
+                    front_matter, _body_markdown, lesson_meta = _load_lesson_markdown(course_slug, lesson_slug)
                 except ValueError:
                     front_matter = {}
+                    lesson_meta = {}
                 lesson_title_by_lesson[lesson_key] = (
                     str(front_matter.get("title") or "").strip() or mat.title
+                )
+                lesson_release_by_lesson[lesson_key] = _lesson_release_state(
+                    request,
+                    front_matter,
+                    lesson_meta,
+                    classroom_id=classroom_id,
+                    course_slug=course_slug,
+                    lesson_slug=lesson_slug,
+                    override_map=release_override_map,
+                    respect_staff_bypass=False,
                 )
 
             rows.append(
@@ -992,6 +1264,7 @@ def _build_lesson_tracker_rows(modules: list[Module], student_count: int) -> lis
                     "review_url": review_url,
                     "review_label": review_label,
                     "teacher_material_html": teacher_material_html_by_lesson.get(lesson_key, ""),
+                    "release_state": lesson_release_by_lesson.get(lesson_key, {}),
                 }
             )
 
@@ -1356,6 +1629,8 @@ def teach_lessons(request):
     except Exception:
         class_id = 0
     selected_class = next((c for c in classes if c.id == class_id), None)
+    notice = (request.GET.get("notice") or "").strip()
+    error = (request.GET.get("error") or "").strip()
 
     target_classes = [selected_class] if selected_class else classes
     class_rows = []
@@ -1365,7 +1640,7 @@ def teach_lessons(request):
         student_count = classroom.students.count()
         modules = list(classroom.modules.prefetch_related("materials").all())
         modules.sort(key=lambda m: (m.order_index, m.id))
-        lesson_rows = _build_lesson_tracker_rows(modules, student_count)
+        lesson_rows = _build_lesson_tracker_rows(request, classroom.id, modules, student_count)
         class_rows.append(
             {
                 "classroom": classroom,
@@ -1381,8 +1656,98 @@ def teach_lessons(request):
             "classes": classes,
             "selected_class_id": selected_class.id if selected_class else 0,
             "class_rows": class_rows,
+            "notice": notice,
+            "error": error,
         },
     )
+
+
+@staff_member_required
+@require_POST
+def teach_set_lesson_release(request):
+    try:
+        class_id = int((request.POST.get("class_id") or "0").strip())
+    except Exception:
+        class_id = 0
+
+    default_return = f"/teach/lessons?class_id={class_id}" if class_id else "/teach/lessons"
+    return_to = _safe_teacher_return_path((request.POST.get("return_to") or "").strip(), default_return)
+
+    classroom = Class.objects.filter(id=class_id).first()
+    if not classroom:
+        return redirect(_with_notice(return_to, error="Class not found."))
+
+    course_slug = (request.POST.get("course_slug") or "").strip()
+    lesson_slug = (request.POST.get("lesson_slug") or "").strip()
+    if not course_slug or not lesson_slug:
+        return redirect(_with_notice(return_to, error="Missing course or lesson slug."))
+
+    action = (request.POST.get("action") or "").strip()
+    try:
+        LessonRelease.objects.only("id").first()
+    except (OperationalError, ProgrammingError) as exc:
+        if "hub_lessonrelease" in str(exc).lower():
+            return redirect(_with_notice(return_to, error="Lesson release table is missing. Run `python manage.py migrate`."))
+        raise
+
+    release = LessonRelease.objects.filter(
+        classroom_id=classroom.id,
+        course_slug=course_slug,
+        lesson_slug=lesson_slug,
+    ).first()
+
+    if action == "set_date":
+        raw_date = (request.POST.get("available_on") or "").strip()
+        parsed_date = _parse_release_date(raw_date)
+        if parsed_date is None:
+            return redirect(_with_notice(return_to, error="Enter a valid date (YYYY-MM-DD)."))
+        if release is None:
+            release = LessonRelease(
+                classroom=classroom,
+                course_slug=course_slug,
+                lesson_slug=lesson_slug,
+            )
+        release.available_on = parsed_date
+        release.force_locked = False
+        release.save()
+        return redirect(_with_notice(return_to, notice=f"Release date set to {parsed_date.isoformat()}."))
+
+    if action == "toggle_lock":
+        if release is None:
+            release = LessonRelease.objects.create(
+                classroom=classroom,
+                course_slug=course_slug,
+                lesson_slug=lesson_slug,
+                force_locked=True,
+            )
+            return redirect(_with_notice(return_to, notice="Lesson locked."))
+        release.force_locked = not release.force_locked
+        release.save(update_fields=["force_locked", "updated_at"])
+        if release.force_locked:
+            return redirect(_with_notice(return_to, notice="Lesson locked."))
+        return redirect(_with_notice(return_to, notice="Lesson lock removed."))
+
+    if action == "unlock_now":
+        if release is None:
+            release = LessonRelease(
+                classroom=classroom,
+                course_slug=course_slug,
+                lesson_slug=lesson_slug,
+            )
+        release.available_on = None
+        release.force_locked = False
+        release.save()
+        return redirect(_with_notice(return_to, notice="Lesson opened now for this class."))
+
+    if action == "reset_default":
+        LessonRelease.objects.filter(
+            classroom_id=classroom.id,
+            course_slug=course_slug,
+            lesson_slug=lesson_slug,
+        ).delete()
+        return redirect(_with_notice(return_to, notice="Lesson release reset to content default."))
+
+    return redirect(_with_notice(return_to, error="Unknown release action."))
 
 
 @staff_member_required
@@ -1434,7 +1799,9 @@ def teach_class_dashboard(request, class_id: int):
             submission_counts[row["material_id"]] = submission_counts.get(row["material_id"], 0) + 1
 
     student_count = classroom.students.count()
-    lesson_rows = _build_lesson_tracker_rows(modules, student_count)
+    lesson_rows = _build_lesson_tracker_rows(request, classroom.id, modules, student_count)
+    notice = (request.GET.get("notice") or "").strip()
+    error = (request.GET.get("error") or "").strip()
 
     return render(
         request,
@@ -1445,6 +1812,8 @@ def teach_class_dashboard(request, class_id: int):
             "student_count": student_count,
             "submission_counts": submission_counts,
             "lesson_rows": lesson_rows,
+            "notice": notice,
+            "error": error,
         },
     )
 

@@ -109,6 +109,7 @@ course: <course slug>
 session: 1
 slug: s01-<lesson-slug>
 title: <Lesson Title>
+available_on: YYYY-MM-DD  # optional: intro-only until this date
 duration_minutes: 75
 makes: <short outcome>
 needs:
@@ -136,6 +137,17 @@ teacher_panel:
     - <what to look for>
 ---
 ```
+
+Release scheduling:
+- Set `available_on` in lesson front matter to keep lessons in intro-only mode until that date.
+- You can also set `available_on` on each lesson entry in `course.yaml`.
+- Until the date, students can open the lesson intro but cannot access full lesson sections or submit uploads.
+- Staff users still see full lesson content.
+- Teachers can override release dates per class from `/teach/lessons` or `/teach/class/<id>`:
+  - set a date,
+  - toggle hard lock,
+  - open now,
+  - reset back to content defaults.
 
 To render videos on lesson pages, add `url` (or `youtube_id`) in each `videos`
 entry:

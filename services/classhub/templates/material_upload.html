@@ -42,17 +42,24 @@
         <div class="card">
           <h2 style="margin:0">Upload your work</h2>
           <p class="muted" style="margin-top:8px">Allowed: <strong>{{ allowed_exts|join:", " }}</strong> · Max <strong>{{ material.max_upload_mb }}MB</strong></p>
+          {% if upload_locked %}
+            <p class="muted" style="margin-top:8px">
+              Submissions open on <strong>{{ upload_available_on|date:"M j, Y" }}</strong>. You can review prior uploads below.
+            </p>
+          {% endif %}
 
           {% if error %}
             <div class="err" role="alert" aria-live="assertive">{{ error }}</div>
           {% endif %}
 
-          <form method="post" enctype="multipart/form-data" style="margin-top:12px">
-            {% csrf_token %}
-            {{ form.file }}
-            <div style="margin-top:10px">{{ form.note }}</div>
-            <button type="submit">Upload</button>
-          </form>
+          {% if not upload_locked %}
+            <form method="post" enctype="multipart/form-data" style="margin-top:12px">
+              {% csrf_token %}
+              {{ form.file }}
+              <div style="margin-top:10px">{{ form.note }}</div>
+              <button type="submit">Upload</button>
+            </form>
+          {% endif %}
         </div>
 
         <div class="card">

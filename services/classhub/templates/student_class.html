@@ -64,18 +64,29 @@
                   <div class="mat">
                     <strong>{{ mat.title }}</strong>
                     {% if mat.type == 'link' and mat.url %}
-                      <div class="mat-link"><a href="{{ mat.url }}" target="_blank" rel="noopener">Open lesson</a></div>
+                      {% with access=material_access|get_item:mat.id %}
+                        {% if access.is_lesson_link and access.is_locked %}
+                          <div class="mat-link"><a href="{{ mat.url }}" target="_blank" rel="noopener">Open intro</a></div>
+                          <div class="muted">Full lesson unlocks on <strong>{{ access.available_on|date:"M j, Y" }}</strong>.</div>
+                        {% else %}
+                          <div class="mat-link"><a href="{{ mat.url }}" target="_blank" rel="noopener">Open lesson</a></div>
+                        {% endif %}
+                      {% endwith %}
                     {% elif mat.type == 'text' and mat.body %}
                       <pre style="margin-top:8px">{{ mat.body }}</pre>
                     {% elif mat.type == 'upload' %}
-                      {% with s=submissions_by_material|get_item:mat.id %}
+                      {% with s=submissions_by_material|get_item:mat.id access=material_access|get_item:mat.id %}
                         <div class="muted">Accepted: {{ mat.accepted_extensions|default:'.sb3' }} · Max {{ mat.max_upload_mb }}MB</div>
-                        <div class="mat-link">
-                          <a href="/material/{{ mat.id }}/upload">Upload / view submissions</a>
-                          {% if s %}
-                            <span class="muted">· {{ s.count }} uploaded (latest saved)</span>
-                          {% endif %}
-                        </div>
+                        {% if access.is_lesson_upload and access.is_locked %}
+                          <div class="muted">Submissions open on <strong>{{ access.available_on|date:"M j, Y" }}</strong>.</div>
+                        {% else %}
+                          <div class="mat-link">
+                            <a href="/material/{{ mat.id }}/upload">Upload / view submissions</a>
+                            {% if s %}
+                              <span class="muted">· {{ s.count }} uploaded (latest saved)</span>
+                            {% endif %}
+                          </div>
+                        {% endif %}
                       {% endwith %}
                     {% else %}
                       <div class="muted empty-state">(Empty material — teacher will fill this in.)</div>

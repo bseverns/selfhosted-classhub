@@ -43,6 +43,44 @@
       .teacher-note-body {
         margin-top: 8px;
       }
+      .release-box {
+        margin-top: 10px;
+        padding: 10px;
+        border-radius: 12px;
+        border: 1px solid rgba(22, 59, 80, 0.14);
+        background: rgba(255, 255, 255, 0.42);
+      }
+      .release-status {
+        font-size: 13px;
+        margin-bottom: 8px;
+      }
+      .release-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .release-actions form {
+        margin: 0;
+      }
+      .release-actions input[type="date"] {
+        width: auto;
+        min-width: 165px;
+      }
+      .notice {
+        border: 1px solid rgba(36, 128, 66, 0.25);
+        background: rgba(224, 248, 229, 0.75);
+        color: #215a2f;
+        border-radius: 12px;
+        padding: 10px;
+      }
+      .error {
+        border: 1px solid rgba(182, 56, 56, 0.35);
+        background: rgba(255, 224, 224, 0.58);
+        color: #8f2d2d;
+        border-radius: 12px;
+        padding: 10px;
+      }
     </style>
   </head>
   <body class="glass-theme">
@@ -76,6 +114,13 @@
         </div>
 
         <div class="card">
+          {% if notice %}
+            <p class="notice" style="margin:0 0 12px 0;">{{ notice }}</p>
+          {% endif %}
+          {% if error %}
+            <p class="error" style="margin:0 0 12px 0;">{{ error }}</p>
+          {% endif %}
+
           <div class="row">
             <h2 style="margin:0">Lesson Tracker</h2>
             <div class="muted">Course/lesson links with submission coverage</div>
@@ -107,6 +152,65 @@
                           <div class="teacher-note-body">{{ row.teacher_material_html|safe }}</div>
                         </details>
                       {% endif %}
+                      <div class="release-box">
+                        {% with release=row.release_state %}
+                          <div class="release-status">
+                            Release:
+                            {% if release.is_locked %}
+                              <strong>Locked</strong>
+                            {% else %}
+                              <strong>Open</strong>
+                            {% endif %}
+                            {% if release.available_on %}
+                              · Date <strong>{{ release.available_on|date:"M j, Y" }}</strong>
+                            {% endif %}
+                            {% if release.has_override %}
+                              · Override active
+                            {% else %}
+                              · Content default
+                            {% endif %}
+                          </div>
+                          <div class="release-actions">
+                            <form method="post" action="/teach/lessons/release">
+                              {% csrf_token %}
+                              <input type="hidden" name="class_id" value="{{ classroom.id }}" />
+                              <input type="hidden" name="course_slug" value="{{ row.course_slug }}" />
+                              <input type="hidden" name="lesson_slug" value="{{ row.lesson_slug }}" />
+                              <input type="hidden" name="action" value="set_date" />
+                              <input type="hidden" name="return_to" value="/teach/class/{{ classroom.id }}" />
+                              <input type="date" name="available_on" value="{% if release.override_available_on %}{{ release.override_available_on|date:'Y-m-d' }}{% endif %}" />
+                              <button type="submit">Set date</button>
+                            </form>
+                            <form method="post" action="/teach/lessons/release">
+                              {% csrf_token %}
+                              <input type="hidden" name="class_id" value="{{ classroom.id }}" />
+                              <input type="hidden" name="course_slug" value="{{ row.course_slug }}" />
+                              <input type="hidden" name="lesson_slug" value="{{ row.lesson_slug }}" />
+                              <input type="hidden" name="action" value="toggle_lock" />
+                              <input type="hidden" name="return_to" value="/teach/class/{{ classroom.id }}" />
+                              <button type="submit">Toggle lock</button>
+                            </form>
+                            <form method="post" action="/teach/lessons/release">
+                              {% csrf_token %}
+                              <input type="hidden" name="class_id" value="{{ classroom.id }}" />
+                              <input type="hidden" name="course_slug" value="{{ row.course_slug }}" />
+                              <input type="hidden" name="lesson_slug" value="{{ row.lesson_slug }}" />
+                              <input type="hidden" name="action" value="unlock_now" />
+                              <input type="hidden" name="return_to" value="/teach/class/{{ classroom.id }}" />
+                              <button type="submit">Open now</button>
+                            </form>
+                            <form method="post" action="/teach/lessons/release">
+                              {% csrf_token %}
+                              <input type="hidden" name="class_id" value="{{ classroom.id }}" />
+                              <input type="hidden" name="course_slug" value="{{ row.course_slug }}" />
+                              <input type="hidden" name="lesson_slug" value="{{ row.lesson_slug }}" />
+                              <input type="hidden" name="action" value="reset_default" />
+                              <input type="hidden" name="return_to" value="/teach/class/{{ classroom.id }}" />
+                              <button type="submit">Reset default</button>
+                            </form>
+                          </div>
+                        {% endwith %}
+                      </div>
                     </td>
                     <td>
                       {% if row.dropboxes %}

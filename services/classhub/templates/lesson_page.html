@@ -142,7 +142,17 @@
           </div>
         </div>
 
-        {% if lesson_videos %}
+        {% if lesson_locked %}
+          <div class="card">
+            <h2 style="margin-top:0;">Lesson schedule</h2>
+            <p class="muted">
+              This lesson is in intro-only mode. Full activities and submissions unlock on
+              <strong>{{ lesson_available_on|date:"M j, Y" }}</strong>.
+            </p>
+          </div>
+        {% endif %}
+
+        {% if not lesson_locked and lesson_videos %}
           <div class="card">
             <h2 style="margin-top:0;">Lesson videos</h2>
             {% for video in lesson_videos %}
@@ -198,7 +208,7 @@
           </div>
         {% endif %}
 
-        {% if lesson_submission.type == "file" %}
+        {% if not lesson_locked and lesson_submission.type == "file" %}
           <div class="card">
             <h2 style="margin-top:0;">Homework dropbox</h2>
             <p class="muted" style="margin-top:8px;">
@@ -233,7 +243,9 @@
           {{ lesson_html|safe }}
         </div>
 
-        {{ helper_widget|safe }}
+        {% if helper_widget %}
+          {{ helper_widget|safe }}
+        {% endif %}
 
         <p class="muted">If something feels unsafe to share, keep your work private and submit only the file. You control what leaves your device.</p>
       </main>

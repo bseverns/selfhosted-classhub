@@ -32,6 +32,7 @@ urlpatterns = [
     # Teacher cockpit (staff-only)
     path("teach", views.teach_home),
     path("teach/lessons", views.teach_lessons),
+    path("teach/lessons/release", views.teach_set_lesson_release),
     path("teach/create-class", views.teach_create_class),
     path("teach/class/<int:class_id>", views.teach_class_dashboard),
     path("teach/class/<int:class_id>/toggle-lock", views.teach_toggle_lock),

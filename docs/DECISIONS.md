@@ -1,5 +1,22 @@
 # Decisions (living)
 
+## 2026-02-16 — Date-based lesson release with intro-only pre-access
+
+**Why:**
+- Teachers need calendar-based pacing without exposing full activities early.
+- Students should see lesson context before unlock, but full exploration and submissions should wait for schedule.
+
+**Tradeoffs:**
+- Release behavior is driven by content metadata (`available_on`) and depends on accurate dates.
+- Intro-only extraction uses heading boundaries (`##`) and may need editorial tuning for unusual lesson formats.
+
+**Plan:**
+- Add optional `available_on: YYYY-MM-DD` on lesson metadata.
+- Before release, render intro-only lesson content for students and hide full lesson blocks.
+- Block lesson-linked uploads until the release date.
+- Show unlock date status on `/student` materials and lesson pages.
+- Add per-class release overrides in teacher tools so staff can set date, lock/unlock, or reset defaults without editing markdown.
+
 ## 2026-02-16 — Restrict Django admin to superusers; hide admin links for non-admin teachers
 
 **Why:**

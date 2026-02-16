@@ -1,12 +1,14 @@
 from io import StringIO
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
+from django.utils import timezone
 
-from .models import Class, Material, Module, StudentIdentity, Submission
+from .models import Class, LessonRelease, Material, Module, StudentIdentity, Submission
 
 
 class TeacherPortalTests(TestCase):
@@ -127,3 +129,93 @@ class CreateTeacherCommandTests(TestCase):
         self.assertTrue(user.check_password("newpass"))
         self.assertEqual(user.email, "")
         self.assertIn("Updated teacher", out.getvalue())
+
+
+class LessonReleaseTests(TestCase):
+    def setUp(self):
+        self.staff = get_user_model().objects.create_user(
+            username="teacher_release",
+            password="pw12345",
+            is_staff=True,
+            is_superuser=False,
+        )
+        self.classroom = Class.objects.create(name="Release Class", join_code="REL12345")
+        self.module = Module.objects.create(classroom=self.classroom, title="Session 1", order_index=0)
+        Material.objects.create(
+            module=self.module,
+            title="Session 1 lesson",
+            type=Material.TYPE_LINK,
+            url="/course/piper_scratch_12_session/s01-welcome-private-workflow",
+            order_index=0,
+        )
+        self.upload = Material.objects.create(
+            module=self.module,
+            title="Homework dropbox",
+            type=Material.TYPE_UPLOAD,
+            accepted_extensions=".sb3",
+            max_upload_mb=50,
+            order_index=1,
+        )
+        self.student = StudentIdentity.objects.create(classroom=self.classroom, display_name="Ada")
+
+    def _login_student(self):
+        session = self.client.session
+        session["student_id"] = self.student.id
+        session["class_id"] = self.classroom.id
+        session.save()
+
+    def test_teacher_can_set_release_date_from_interface(self):
+        self.client.force_login(self.staff)
+        target_date = timezone.localdate() + timedelta(days=3)
+
+        resp = self.client.post(
+            "/teach/lessons/release",
+            {
+                "class_id": str(self.classroom.id),
+                "course_slug": "piper_scratch_12_session",
+                "lesson_slug": "s01-welcome-private-workflow",
+                "action": "set_date",
+                "available_on": target_date.isoformat(),
+                "return_to": f"/teach/lessons?class_id={self.classroom.id}",
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+
+        row = LessonRelease.objects.get(
+            classroom=self.classroom,
+            course_slug="piper_scratch_12_session",
+            lesson_slug="s01-welcome-private-workflow",
+        )
+        self.assertEqual(row.available_on, target_date)
+        self.assertFalse(row.force_locked)
+
+    def test_student_lesson_is_intro_only_before_release(self):
+        LessonRelease.objects.create(
+            classroom=self.classroom,
+            course_slug="piper_scratch_12_session",
+            lesson_slug="s01-welcome-private-workflow",
+            available_on=timezone.localdate() + timedelta(days=2),
+        )
+        self._login_student()
+
+        resp = self.client.get("/course/piper_scratch_12_session/s01-welcome-private-workflow")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "intro-only mode")
+        self.assertNotContains(resp, "Homework dropbox")
+
+    def test_student_upload_is_blocked_before_release(self):
+        locked_until = timezone.localdate() + timedelta(days=2)
+        LessonRelease.objects.create(
+            classroom=self.classroom,
+            course_slug="piper_scratch_12_session",
+            lesson_slug="s01-welcome-private-workflow",
+            available_on=locked_until,
+        )
+        self._login_student()
+
+        resp = self.client.post(
+            f"/material/{self.upload.id}/upload",
+            {"file": SimpleUploadedFile("project.sb3", b"dummy")},
+        )
+        self.assertEqual(resp.status_code, 403)
+        self.assertContains(resp, locked_until.isoformat())
