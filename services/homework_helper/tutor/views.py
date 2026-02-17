@@ -14,6 +14,7 @@ from django.core.cache import cache
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET, require_POST
 from common.request_safety import (
+    build_staff_or_student_actor_key,
     client_ip_from_request,
     fixed_window_allow,
 )
@@ -129,16 +130,54 @@ def _reset_backend_failure_state(backend: str) -> None:
     cache.delete(_backend_circuit_key(backend))
 
 
-def _redact(text: str) -> str:
-    """Very light redaction.
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except Exception:
+        return default
 
-    Goal: reduce accidental PII in prompts.
-    Not a complete privacy solution.
-    """
-    text = EMAIL_RE.sub("[REDACTED_EMAIL]", text)
-    text = PHONE_RE.sub("[REDACTED_PHONE]", text)
-    return text
 
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except Exception:
+        return default
+
+
+def _request_id(request) -> str:
+    header_value = (request.META.get("HTTP_X_REQUEST_ID", "") or "").strip()
+    if header_value:
+        return header_value[:80]
+    return uuid.uuid4().hex
+
+
+def _json_response(payload: dict, *, request_id: str, status: int = 200) -> JsonResponse:
+    body = dict(payload or {})
+    body.setdefault("request_id", request_id)
+    resp = JsonResponse(body, status=status)
+    resp["X-Request-ID"] = request_id
+    return resp
+
+
+def _log_chat_event(level: str, event: str, *, request_id: str, **fields):
+    row = {"event": event, "request_id": request_id, **fields}
+    line = json.dumps(row, sort_keys=True, default=str)
+    if level == "warning":
+        logger.warning(line)
+    elif level == "error":
+        logger.error(line)
+    else:
+        logger.info(line)
+
+
+def _backend_circuit_key(backend: str) -> str:
+    return f"helper:circuit_open:{backend}"
 
 def _student_session_exists(student_id: int, class_id: int) -> bool:
     """Validate student session against shared Class Hub table when available."""

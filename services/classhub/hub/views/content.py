@@ -142,7 +142,7 @@ def _normalize_stored_lesson_videos(course_slug: str, lesson_slug: str) -> list[
         url = (row.source_url or "").strip()
         if row.video_file:
             media_url = f"/lesson-video/{row.id}/stream"
-            media_type = _video_mime_type(row.video_file.name)
+            media_type = video_mime_type(row.video_file.name)
             source_type = "native"
             embed_url = ""
         else:

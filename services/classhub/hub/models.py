@@ -211,9 +211,9 @@ class StudentEvent(models.Model):
     class Meta:
         ordering = ["-created_at", "-id"]
         indexes = [
-            models.Index(fields=["event_type", "created_at"], name="hub_studente_event_t_e17920_idx"),
-            models.Index(fields=["classroom", "created_at"], name="hub_studente_classro_d3d6f9_idx"),
-            models.Index(fields=["student", "created_at"], name="hub_studente_student_43a607_idx"),
+            models.Index(fields=["event_type", "created_at"], name="hub_student_event_t_387746_idx"),
+            models.Index(fields=["classroom", "created_at"], name="hub_student_classro_a0c234_idx"),
+            models.Index(fields=["student", "created_at"], name="hub_student_student_01e0d2_idx"),
         ]
 
     def save(self, *args, **kwargs):
