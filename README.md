@@ -19,6 +19,10 @@ Mission:
 
 Detailed architecture: `docs/ARCHITECTURE.md`
 
+Service notebooks:
+- `services/classhub/README.md`
+- `services/homework_helper/README.md`
+
 ## Quickstart (local)
 
 1. Configure environment:
@@ -57,3 +61,5 @@ Start with `docs/START_HERE.md` for role-specific paths:
 - Operator
 - Teacher/staff
 - Developer
+
+Before opening a PR, run through `docs/MERGE_READINESS.md`.
