@@ -1,6 +1,7 @@
 # Class Hub + Helper: What / Where / Why (Plain-Language Guide)
 
 This guide is for non-programmer staff who need to run, demo, or support the LMS.
+For the canonical role-based doc map and URL list, start at `docs/START_HERE.md`.
 
 ## What this system is
 
@@ -10,25 +11,10 @@ This guide is for non-programmer staff who need to run, demo, or support the LMS
 - Teachers use staff accounts and open the teacher portal at `/teach`.
 - Admins use Django admin at `/admin/`.
 
-## Where to go (URLs)
+## Where to go
 
-- Student join page: `/`
-- Student class page: `/student`
-- Teacher portal: `/teach`
-- Teacher lesson tracker: `/teach/lessons`
-- Teacher video manager: `/teach/videos`
-- Admin login: `/admin/login/`
-- Site health check: `/healthz`
-- Helper health check: `/helper/healthz`
-
-## Where things live (repo map)
-
-- `compose/`: deployment config (Docker, Caddy, env)
-- `services/classhub/`: main LMS app (students + teacher portal + admin)
-- `services/homework_helper/`: AI helper app
-- `services/classhub/content/courses/`: course content files (what students read)
-- `docs/`: operational and policy docs
-- `scripts/`: helper scripts for rebuilds and checks
+Use canonical route list in `docs/START_HERE.md#canonical-url-map`.
+Use role-based docs list in `docs/START_HERE.md#pick-your-role`.
 
 ## Why the system is split this way
 
@@ -37,13 +23,15 @@ This guide is for non-programmer staff who need to run, demo, or support the LMS
 - Postgres stores core records, Redis handles limits/queues, MinIO stores files.
 - This design keeps operations simpler and failure boundaries clearer.
 
-## Day-of-class quick checklist (operator view)
+## Day-of-class quick checklist
 
 1. Confirm site opens at your domain.
-2. Confirm teacher can log in at `/admin/login/` and open `/teach`.
-3. Confirm students can join from `/` using class code.
-4. Confirm helper responds in a lesson page.
-5. Confirm submission queue is visible in `/teach`.
+2. Confirm teacher can sign in and open teacher portal.
+3. Confirm students can join and reach class view.
+4. Confirm helper responds inside lesson/class page.
+5. Confirm teacher can see submissions queue.
+
+Detailed operator run steps: `docs/RUNBOOK.md`
 
 ## If something is wrong
 
@@ -58,10 +46,8 @@ This guide is for non-programmer staff who need to run, demo, or support the LMS
 - Uploads failing:
   - Check teacher dropbox settings and allowed file extensions.
 
-## Who should use which docs next
+## What to read next
 
-- Teachers and office staff: `docs/TEACHER_PORTAL.md`
-- Staffing changes: `docs/TEACHER_HANDOFF_CHECKLIST.md`
-- Deployment and server operations: `docs/RUNBOOK.md`
-- Technical architecture overview: `docs/ARCHITECTURE.md`
-
+- Role-specific paths: `docs/START_HERE.md`
+- Teacher workflow details: `docs/TEACHER_PORTAL.md`
+- Operations depth: `docs/RUNBOOK.md`

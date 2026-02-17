@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 
 from .models import (
+    AuditEvent,
     Class,
     LessonAsset,
     LessonAssetFolder,
@@ -9,6 +10,7 @@ from .models import (
     LessonVideo,
     Material,
     Module,
+    StudentEvent,
     StudentIdentity,
     Submission,
 )
@@ -34,6 +36,23 @@ class StudentIdentityAdmin(admin.ModelAdmin):
     list_display = ("display_name", "return_code", "classroom", "created_at", "last_seen_at")
     list_filter = ("classroom",)
     search_fields = ("display_name", "return_code")
+
+
+@admin.register(StudentEvent)
+class StudentEventAdmin(admin.ModelAdmin):
+    list_display = ("created_at", "event_type", "classroom", "student", "source", "ip_address")
+    list_filter = ("event_type", "classroom", "student", ("created_at", admin.DateFieldListFilter))
+    search_fields = ("source", "ip_address", "student__display_name", "classroom__name", "classroom__join_code")
+    readonly_fields = ("created_at",)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Submission)
@@ -90,3 +109,20 @@ class LessonAssetAdmin(admin.ModelAdmin):
         return format_html('<a href="/lesson-asset/{}/download" target="_blank" rel="noopener">Download</a>', obj.id)
 
     download_link.short_description = "Download"
+
+
+@admin.register(AuditEvent)
+class AuditEventAdmin(admin.ModelAdmin):
+    list_display = ("created_at", "action", "actor_user", "classroom", "target_type", "target_id", "ip_address")
+    list_filter = ("action", "classroom", "actor_user")
+    search_fields = ("action", "summary", "target_type", "target_id", "ip_address", "actor_user__username")
+    readonly_fields = ("created_at",)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

@@ -1,0 +1,39 @@
+name: migration-gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  classhub:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install classhub deps
+        run: pip install -r services/classhub/requirements.txt
+      - name: Check classhub migrations committed
+        env:
+          DJANGO_DEBUG: "0"
+          DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+          DJANGO_SECRET_KEY: ci-only-not-used
+        run: python services/classhub/manage.py makemigrations --check --dry-run
+
+  helper:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install helper deps
+        run: pip install -r services/homework_helper/requirements.txt
+      - name: Check helper migrations committed
+        env:
+          DJANGO_DEBUG: "0"
+          DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+          DJANGO_SECRET_KEY: ci-only-not-used
+        run: python services/homework_helper/manage.py makemigrations --check --dry-run

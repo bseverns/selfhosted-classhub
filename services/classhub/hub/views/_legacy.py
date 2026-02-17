@@ -10,7 +10,6 @@ are reverse-proxied at `/helper/*` by Caddy.
 """
 
 import json
-import ipaddress
 import mimetypes
 import re
 import tempfile
@@ -36,9 +35,10 @@ from django.core.signing import BadSignature, SignatureExpired
 import yaml
 import markdown as md
 import bleach
+from common.request_safety import client_ip_from_request, fixed_window_allow
 
-from .forms import SubmissionUploadForm
-from .models import (
+from ..forms import SubmissionUploadForm
+from ..models import (
     Class,
     LessonAsset,
     LessonAssetFolder,
@@ -430,43 +430,15 @@ def index(request):
 
 
 def _rate_limit(key: str, limit: int, window_seconds: int) -> bool:
-    """Return True when request is within limit, False when blocked."""
-    if limit <= 0:
-        return True
-    current = cache.get(key)
-    if current is None:
-        cache.set(key, 1, timeout=window_seconds)
-        return True
-    if int(current) >= limit:
-        return False
-    try:
-        cache.incr(key)
-    except Exception:
-        cache.set(key, int(current) + 1, timeout=window_seconds)
-    return True
+    return fixed_window_allow(key, limit=limit, window_seconds=window_seconds, cache_backend=cache)
 
 
 def _client_ip(request) -> str:
-    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    if forwarded:
-        for part in forwarded.split(","):
-            candidate = part.strip()
-            if not candidate:
-                continue
-            try:
-                ipaddress.ip_address(candidate)
-                return candidate
-            except ValueError:
-                continue
-
-    remote = (request.META.get("REMOTE_ADDR", "") or "").strip()
-    if remote:
-        try:
-            ipaddress.ip_address(remote)
-            return remote
-        except ValueError:
-            pass
-    return "unknown"
+    return client_ip_from_request(
+        request,
+        trust_proxy_headers=getattr(settings, "REQUEST_SAFETY_TRUST_PROXY_HEADERS", True),
+        xff_index=getattr(settings, "REQUEST_SAFETY_XFF_INDEX", 0),
+    )
 
 
 def _create_student_identity(classroom: Class, display_name: str) -> StudentIdentity:
@@ -2548,3 +2520,44 @@ def teach_material_submissions(request, material_id: int):
             "show": show,
         },
     )
+
+
+# -----------------------------------------------------------------------------
+# Service-backed helper overrides
+#
+# Keep endpoint behavior in this module stable while moving testable business
+# logic into hub/services modules.
+# -----------------------------------------------------------------------------
+from ..services.markdown_content import (  # noqa: E402
+    is_teacher_section_heading as _is_teacher_section_heading,
+    load_course_manifest as _load_course_manifest,
+    load_lesson_markdown as _load_lesson_markdown,
+    load_teacher_material_html as _load_teacher_material_html,
+    render_markdown_to_safe_html as _render_markdown_to_safe_html,
+    split_lesson_markdown_for_audiences as _split_lesson_markdown_for_audiences,
+    teacher_panel_markdown as _teacher_panel_markdown,
+    validate_front_matter as _validate_front_matter,
+)
+from ..services.release_state import (  # noqa: E402
+    lesson_available_on as _lesson_available_on,
+    lesson_release_override_map as _lesson_release_override_map,
+    lesson_release_state as _lesson_release_state,
+    parse_release_date as _parse_release_date,
+    request_can_bypass_lesson_release as _request_can_bypass_lesson_release,
+)
+from ..services.upload_policy import (  # noqa: E402
+    front_matter_submission as _front_matter_submission,
+    parse_extensions as _parse_extensions,
+)
+from ..services.content_links import (  # noqa: E402
+    courses_dir as _courses_dir,
+    extract_youtube_id as _extract_youtube_id,
+    is_probably_video_url as _is_probably_video_url,
+    normalize_lesson_videos as _normalize_lesson_videos,
+    parse_course_lesson_url as _parse_course_lesson_url,
+    safe_filename as _safe_filename,
+    safe_external_url as _safe_external_url,
+    video_mime_type as _video_mime_type,
+)
+
+_COURSES_DIR = _courses_dir()

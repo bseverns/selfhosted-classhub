@@ -63,8 +63,8 @@ services:
 
   classhub_web:
     build:
-      context: ../services/classhub
-      dockerfile: Dockerfile
+      context: ../services
+      dockerfile: classhub/Dockerfile
     container_name: classhub_web
     restart: unless-stopped
     env_file: [.env]
@@ -89,8 +89,8 @@ services:
 
   helper_web:
     build:
-      context: ../services/homework_helper
-      dockerfile: Dockerfile
+      context: ../services
+      dockerfile: homework_helper/Dockerfile
     container_name: helper_web
     restart: unless-stopped
     env_file: [.env]

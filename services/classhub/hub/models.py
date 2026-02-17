@@ -6,11 +6,11 @@ Students never authenticate with email/password; they join a class by code.
 Note: for Day-1, we keep the model tiny. As the platform grows, add:
 - Organizations/schools (multi-tenancy)
 - Rubrics/grading + teacher feedback
-- Audit logs
 """
 
 import re
 import secrets
+from django.conf import settings
 from django.db import models
 
 
@@ -166,6 +166,68 @@ class StudentIdentity(models.Model):
         return f"{self.display_name} @ {self.classroom.join_code}"
 
 
+class StudentEvent(models.Model):
+    """Append-only student activity stream for operational visibility.
+
+    Privacy boundary:
+    - Keep this event log metadata-only (IDs, modes, status, timing).
+    - Do not store raw helper prompts or submission file contents.
+    """
+
+    EVENT_CLASS_JOIN = "class_join"
+    EVENT_REJOIN_DEVICE_HINT = "session_rejoin_device_hint"
+    EVENT_REJOIN_RETURN_CODE = "session_rejoin_return_code"
+    EVENT_SUBMISSION_UPLOAD = "submission_upload"
+    EVENT_HELPER_CHAT_ACCESS = "helper_chat_access"
+
+    EVENT_TYPE_CHOICES = [
+        (EVENT_CLASS_JOIN, "Class join"),
+        (EVENT_REJOIN_DEVICE_HINT, "Session rejoin (device hint)"),
+        (EVENT_REJOIN_RETURN_CODE, "Session rejoin (return code)"),
+        (EVENT_SUBMISSION_UPLOAD, "Submission upload"),
+        (EVENT_HELPER_CHAT_ACCESS, "Helper chat access"),
+    ]
+
+    classroom = models.ForeignKey(
+        Class,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="student_events",
+    )
+    student = models.ForeignKey(
+        "StudentIdentity",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="events",
+    )
+    event_type = models.CharField(max_length=48, choices=EVENT_TYPE_CHOICES)
+    source = models.CharField(max_length=40, default="classhub")
+    details = models.JSONField(default=dict, blank=True)
+    ip_address = models.GenericIPAddressField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["event_type", "created_at"]),
+            models.Index(fields=["classroom", "created_at"]),
+            models.Index(fields=["student", "created_at"]),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None:
+            raise ValueError("StudentEvent is append-only and cannot be updated.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValueError("StudentEvent is append-only and cannot be deleted.")
+
+    def __str__(self) -> str:
+        return f"{self.created_at.isoformat()} {self.event_type}"
+
+
 def _safe_path_part(raw: str) -> str:
     value = re.sub(r"[^a-zA-Z0-9_-]+", "-", (raw or "").strip().lower())
     value = value.strip("-")
@@ -304,3 +366,40 @@ class LessonAsset(models.Model):
 
     def __str__(self) -> str:
         return f"{self.folder.path}: {self.title}"
+
+
+class AuditEvent(models.Model):
+    """Immutable staff-action record for operations and incident review."""
+
+    actor_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="hub_audit_events",
+    )
+    classroom = models.ForeignKey(
+        Class,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_events",
+    )
+    action = models.CharField(max_length=80)
+    target_type = models.CharField(max_length=80, blank=True, default="")
+    target_id = models.CharField(max_length=64, blank=True, default="")
+    summary = models.CharField(max_length=255, blank=True, default="")
+    metadata = models.JSONField(default=dict, blank=True)
+    ip_address = models.GenericIPAddressField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["action", "created_at"]),
+            models.Index(fields=["classroom", "created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.created_at.isoformat()} {self.action} {self.target_type}:{self.target_id}"

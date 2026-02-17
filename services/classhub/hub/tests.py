@@ -9,7 +9,7 @@ from django.core.management.base import CommandError
 from django.test import Client, TestCase
 from django.utils import timezone
 
-from .models import Class, LessonRelease, Material, Module, StudentIdentity, Submission
+from .models import AuditEvent, Class, LessonRelease, Material, Module, StudentEvent, StudentIdentity, Submission
 
 
 class TeacherPortalTests(TestCase):
@@ -242,6 +242,9 @@ class JoinClassTests(TestCase):
         r1 = self.client.post("/join", data=json.dumps(payload), content_type="application/json")
         self.assertEqual(r1.status_code, 200)
         first_id = self.client.session.get("student_id")
+        first_event = StudentEvent.objects.order_by("-id").first()
+        self.assertIsNotNone(first_event)
+        self.assertEqual(first_event.event_type, StudentEvent.EVENT_CLASS_JOIN)
 
         # Simulate different machine/browser (no prior device cookie).
         other = Client()
@@ -267,6 +270,9 @@ class JoinClassTests(TestCase):
         self.assertEqual(first_id, second_id)
         self.assertTrue(r2.json().get("rejoined"))
         self.assertEqual(StudentIdentity.objects.filter(classroom=self.classroom).count(), 1)
+        event = StudentEvent.objects.order_by("-id").first()
+        self.assertIsNotNone(event)
+        self.assertEqual(event.event_type, StudentEvent.EVENT_REJOIN_DEVICE_HINT)
 
     def test_join_same_device_with_different_name_creates_new_identity(self):
         payload = {"class_code": self.classroom.join_code, "display_name": "Ada"}
@@ -315,6 +321,9 @@ class JoinClassTests(TestCase):
 
         self.assertEqual(first_id, second_id)
         self.assertEqual(StudentIdentity.objects.filter(classroom=self.classroom).count(), 1)
+        event = StudentEvent.objects.order_by("-id").first()
+        self.assertIsNotNone(event)
+        self.assertEqual(event.event_type, StudentEvent.EVENT_REJOIN_RETURN_CODE)
 
     def test_join_with_invalid_return_code_is_rejected(self):
         resp = self.client.post(
@@ -331,3 +340,133 @@ class JoinClassTests(TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(resp.json().get("error"), "invalid_return_code")
         self.assertEqual(StudentIdentity.objects.filter(classroom=self.classroom).count(), 0)
+
+
+class TeacherAuditTests(TestCase):
+    def setUp(self):
+        self.staff = get_user_model().objects.create_user(
+            username="teacher_audit",
+            password="pw12345",
+            is_staff=True,
+            is_superuser=False,
+        )
+        self.classroom = Class.objects.create(name="Audit Class", join_code="AUD12345")
+
+    def test_teach_toggle_lock_creates_audit_event(self):
+        self.client.force_login(self.staff)
+
+        resp = self.client.post(f"/teach/class/{self.classroom.id}/toggle-lock")
+        self.assertEqual(resp.status_code, 302)
+
+        event = AuditEvent.objects.filter(action="class.toggle_lock").first()
+        self.assertIsNotNone(event)
+        self.assertEqual(event.classroom_id, self.classroom.id)
+        self.assertEqual(event.actor_user_id, self.staff.id)
+
+
+class SubmissionRetentionCommandTests(TestCase):
+    def setUp(self):
+        classroom = Class.objects.create(name="Retention Class", join_code="RET12345")
+        module = Module.objects.create(classroom=classroom, title="Session 1", order_index=0)
+        material = Material.objects.create(
+            module=module,
+            title="Upload",
+            type=Material.TYPE_UPLOAD,
+            accepted_extensions=".sb3",
+            max_upload_mb=50,
+            order_index=0,
+        )
+        student = StudentIdentity.objects.create(classroom=classroom, display_name="Ada")
+
+        self.old = Submission.objects.create(
+            material=material,
+            student=student,
+            original_filename="old.sb3",
+            file=SimpleUploadedFile("old.sb3", b"old"),
+        )
+        self.new = Submission.objects.create(
+            material=material,
+            student=student,
+            original_filename="new.sb3",
+            file=SimpleUploadedFile("new.sb3", b"new"),
+        )
+        Submission.objects.filter(id=self.old.id).update(uploaded_at=timezone.now() - timedelta(days=120))
+
+    def test_prune_submissions_dry_run_keeps_rows(self):
+        call_command("prune_submissions", older_than_days=90, dry_run=True)
+        self.assertEqual(Submission.objects.count(), 2)
+
+    def test_prune_submissions_deletes_old_rows(self):
+        call_command("prune_submissions", older_than_days=90)
+        ids = set(Submission.objects.values_list("id", flat=True))
+        self.assertNotIn(self.old.id, ids)
+        self.assertIn(self.new.id, ids)
+
+
+class StudentEventRetentionCommandTests(TestCase):
+    def setUp(self):
+        self.classroom = Class.objects.create(name="Events Class", join_code="EVT12345")
+        self.student = StudentIdentity.objects.create(classroom=self.classroom, display_name="Ada")
+        self.old = StudentEvent.objects.create(
+            classroom=self.classroom,
+            student=self.student,
+            event_type=StudentEvent.EVENT_CLASS_JOIN,
+            source="test",
+            details={},
+        )
+        self.new = StudentEvent.objects.create(
+            classroom=self.classroom,
+            student=self.student,
+            event_type=StudentEvent.EVENT_SUBMISSION_UPLOAD,
+            source="test",
+            details={},
+        )
+        StudentEvent.objects.filter(id=self.old.id).update(created_at=timezone.now() - timedelta(days=120))
+
+    def test_prune_student_events_dry_run_keeps_rows(self):
+        call_command("prune_student_events", older_than_days=90, dry_run=True)
+        self.assertEqual(StudentEvent.objects.count(), 2)
+
+    def test_prune_student_events_deletes_old_rows(self):
+        call_command("prune_student_events", older_than_days=90)
+        ids = set(StudentEvent.objects.values_list("id", flat=True))
+        self.assertNotIn(self.old.id, ids)
+        self.assertIn(self.new.id, ids)
+
+
+class StudentEventSubmissionTests(TestCase):
+    def setUp(self):
+        self.classroom = Class.objects.create(name="Uploads Class", join_code="UPL12345")
+        self.module = Module.objects.create(classroom=self.classroom, title="Session 1", order_index=0)
+        self.material = Material.objects.create(
+            module=self.module,
+            title="Upload your project",
+            type=Material.TYPE_UPLOAD,
+            accepted_extensions=".sb3",
+            max_upload_mb=50,
+            order_index=0,
+        )
+        self.student = StudentIdentity.objects.create(classroom=self.classroom, display_name="Ada")
+
+    def _login_student(self):
+        session = self.client.session
+        session["student_id"] = self.student.id
+        session["class_id"] = self.classroom.id
+        session.save()
+
+    def test_material_upload_emits_student_event(self):
+        self._login_student()
+        resp = self.client.post(
+            f"/material/{self.material.id}/upload",
+            {
+                "file": SimpleUploadedFile("project.sb3", b"dummy"),
+                "note": "done",
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+
+        event = StudentEvent.objects.filter(event_type=StudentEvent.EVENT_SUBMISSION_UPLOAD).order_by("-id").first()
+        self.assertIsNotNone(event)
+        self.assertEqual(event.classroom_id, self.classroom.id)
+        self.assertEqual(event.student_id, self.student.id)
+        self.assertEqual(int(event.details.get("material_id") or 0), self.material.id)

@@ -23,6 +23,10 @@ HELPER_MAX_CONCURRENCY=2
 HELPER_QUEUE_MAX_WAIT_SECONDS=10
 HELPER_QUEUE_POLL_SECONDS=0.2
 HELPER_QUEUE_SLOT_TTL_SECONDS=120
+HELPER_BACKEND_MAX_ATTEMPTS=2
+HELPER_BACKOFF_SECONDS=0.4
+HELPER_CIRCUIT_BREAKER_FAILURES=5
+HELPER_CIRCUIT_BREAKER_TTL_SECONDS=30
 HELPER_TOPIC_FILTER_MODE=strict
 HELPER_TEXT_LANGUAGE_KEYWORDS=pascal,python,java,javascript,typescript,c++,c#,csharp,ruby,php,go,golang,rust,swift,kotlin
 ```
@@ -186,6 +190,23 @@ The helper uses a small Redis-backed slot queue:
 - `HELPER_QUEUE_MAX_WAIT_SECONDS`: how long to wait for a slot (default: 10)
 - `HELPER_QUEUE_POLL_SECONDS`: polling interval (default: 0.2)
 - `HELPER_QUEUE_SLOT_TTL_SECONDS`: auto-release safety timeout (default: 120)
+
+## Backend resilience + telemetry
+
+The helper now retries transient backend failures before returning an error.
+
+- `HELPER_BACKEND_MAX_ATTEMPTS`: total backend attempts per request (default: 2)
+- `HELPER_BACKOFF_SECONDS`: base exponential backoff (default: 0.4)
+- `HELPER_CIRCUIT_BREAKER_FAILURES`: consecutive failures before temporary open-circuit (default: 5)
+- `HELPER_CIRCUIT_BREAKER_TTL_SECONDS`: open-circuit duration and failure-window TTL (default: 30)
+
+`POST /helper/chat` responses now include:
+- `request_id` (also returned as `X-Request-ID` response header)
+- `attempts`
+- timing fields (`queue_wait_ms`, `total_ms`) on successful calls
+
+Service logs now emit structured helper chat events (rate limits, queue busy,
+backend failures, successful calls) for easier operational tracing.
 
 ## Access boundary
 

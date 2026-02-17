@@ -21,6 +21,7 @@ docker compose up -d
 
 Then edit files under:
 
+- `services/common/` (shared request safety helpers)
 - `services/classhub/` (Class Hub Django app)
 - `services/homework_helper/` (Homework Helper Django app)
 - `services/classhub/content/` (markdown course packs)
@@ -113,3 +114,11 @@ With `DJANGO_DEBUG=1`:
 
 In production, remove the override file or set `DJANGO_DEBUG=0`
 and rebuild the image.
+
+For production deploys, prefer:
+
+```bash
+bash scripts/deploy_with_smoke.sh
+```
+
+That path intentionally uses only `compose/docker-compose.yml` and adds smoke checks.

@@ -11,6 +11,16 @@
 - Same-device student rejoin uses a signed, HTTP-only cookie hint; cross-device recovery still uses return code.
 - Local LLM inference keeps student queries on your infrastructure, but logs and
   prompt storage still require care.
+- Teacher/staff mutations in `/teach/*` now emit immutable `AuditEvent` rows for
+  incident review and operational accountability.
+- Student-facing activity telemetry now emits append-only `StudentEvent` rows for:
+  - class join / rejoin mode
+  - submission upload metadata
+  - helper chat access metadata
+
+`StudentEvent` privacy boundary:
+- Metadata only (IDs, mode, status/timing/request IDs).
+- No raw helper prompt text and no file contents are stored in `StudentEvent.details`.
 
 ## Student submissions (uploads)
 
@@ -20,8 +30,10 @@
   - Staff/admin can download any submission.
 - Decide on a retention policy (e.g. delete uploads after N days) if you are working
   in higher-risk environments.
+  - Use `python manage.py prune_submissions --older-than-days <N>` to enforce retention.
+- Event log retention is also operator-defined:
+  - `python manage.py prune_student_events --older-than-days <N>`
 
 ## Future
 - Google SSO for teachers
-- Audit logs for teacher/admin actions
 - Separate DBs per service if needed

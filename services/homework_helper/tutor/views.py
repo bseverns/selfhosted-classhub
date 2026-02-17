@@ -1,18 +1,27 @@
 import json
-import ipaddress
+import logging
 import os
 import re
+import time
 import urllib.error
 import urllib.request
+import uuid
 from functools import lru_cache
 from pathlib import Path
 
+from django.conf import settings
 from django.core.cache import cache
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET, require_POST
+from common.request_safety import (
+    build_staff_or_student_actor_key,
+    client_ip_from_request,
+    fixed_window_allow,
+)
 
 from .policy import build_instructions
 from .queueing import acquire_slot, release_slot
+from .classhub_events import emit_helper_chat_access_event
 
 EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I)
 PHONE_RE = re.compile(r"\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b")
@@ -34,6 +43,88 @@ DEFAULT_TEXT_LANGUAGE_KEYWORDS = [
     "swift",
     "kotlin",
 ]
+logger = logging.getLogger(__name__)
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except Exception:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except Exception:
+        return default
+
+
+def _request_id(request) -> str:
+    header_value = (request.META.get("HTTP_X_REQUEST_ID", "") or "").strip()
+    if header_value:
+        return header_value[:80]
+    return uuid.uuid4().hex
+
+
+def _json_response(payload: dict, *, request_id: str, status: int = 200) -> JsonResponse:
+    body = dict(payload or {})
+    body.setdefault("request_id", request_id)
+    resp = JsonResponse(body, status=status)
+    resp["X-Request-ID"] = request_id
+    return resp
+
+
+def _log_chat_event(level: str, event: str, *, request_id: str, **fields):
+    row = {"event": event, "request_id": request_id, **fields}
+    line = json.dumps(row, sort_keys=True, default=str)
+    if level == "warning":
+        logger.warning(line)
+    elif level == "error":
+        logger.error(line)
+    else:
+        logger.info(line)
+
+
+def _backend_circuit_key(backend: str) -> str:
+    return f"helper:circuit_open:{backend}"
+
+
+def _backend_failure_counter_key(backend: str) -> str:
+    return f"helper:circuit_failures:{backend}"
+
+
+def _backend_circuit_is_open(backend: str) -> bool:
+    return bool(cache.get(_backend_circuit_key(backend)))
+
+
+def _record_backend_failure(backend: str) -> None:
+    threshold = max(_env_int("HELPER_CIRCUIT_BREAKER_FAILURES", 5), 1)
+    ttl = max(_env_int("HELPER_CIRCUIT_BREAKER_TTL_SECONDS", 30), 1)
+    key = _backend_failure_counter_key(backend)
+    current = cache.get(key)
+    if current is None:
+        cache.set(key, 1, timeout=ttl)
+        count = 1
+    else:
+        try:
+            count = int(cache.incr(key))
+        except Exception:
+            count = int(current) + 1
+            cache.set(key, count, timeout=ttl)
+    if count >= threshold:
+        cache.set(_backend_circuit_key(backend), 1, timeout=ttl)
+
+
+def _reset_backend_failure_state(backend: str) -> None:
+    cache.delete(_backend_failure_counter_key(backend))
+    cache.delete(_backend_circuit_key(backend))
 
 
 def _redact(text: str) -> str:
@@ -45,55 +136,6 @@ def _redact(text: str) -> str:
     text = EMAIL_RE.sub("[REDACTED_EMAIL]", text)
     text = PHONE_RE.sub("[REDACTED_PHONE]", text)
     return text
-
-
-def _rate_limit(key: str, limit: int, window_seconds: int) -> bool:
-    """Return True if allowed; False if blocked."""
-    current = cache.get(key)
-    if current is None:
-        cache.set(key, 1, timeout=window_seconds)
-        return True
-    if int(current) >= limit:
-        return False
-    try:
-        cache.incr(key)
-    except Exception:
-        cache.set(key, int(current) + 1, timeout=window_seconds)
-    return True
-
-
-def _client_ip(request) -> str:
-    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    if forwarded:
-        for part in forwarded.split(","):
-            candidate = part.strip()
-            if not candidate:
-                continue
-            try:
-                ipaddress.ip_address(candidate)
-                return candidate
-            except ValueError:
-                continue
-
-    remote = (request.META.get("REMOTE_ADDR", "") or "").strip()
-    if remote:
-        try:
-            ipaddress.ip_address(remote)
-            return remote
-        except ValueError:
-            pass
-    return "unknown"
-
-
-def _actor_key(request) -> str:
-    if request.user.is_authenticated and request.user.is_staff:
-        return f"staff:{request.user.id}"
-
-    student_id = request.session.get("student_id")
-    class_id = request.session.get("class_id")
-    if student_id and class_id:
-        return f"student:{class_id}:{student_id}"
-    return ""
 
 
 def _ollama_chat(base_url: str, model: str, instructions: str, message: str) -> tuple[str, str]:
@@ -140,6 +182,50 @@ def _openai_chat(model: str, instructions: str, message: str) -> tuple[str, str]
         input=message,
     )
     return (getattr(response, "output_text", "") or ""), model
+
+
+def _is_retryable_backend_error(exc: Exception) -> bool:
+    if isinstance(exc, RuntimeError) and str(exc) in {"openai_not_installed", "unknown_backend"}:
+        return False
+    if isinstance(exc, (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError)):
+        return True
+    return exc.__class__.__name__ in {
+        "APIConnectionError",
+        "APITimeoutError",
+        "RateLimitError",
+        "InternalServerError",
+    }
+
+
+def _invoke_backend(backend: str, instructions: str, message: str) -> tuple[str, str]:
+    if backend == "ollama":
+        model = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
+        base_url = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
+        return _ollama_chat(base_url, model, instructions, message)
+    if backend == "openai":
+        model = os.getenv("OPENAI_MODEL", "gpt-5.2")
+        return _openai_chat(model, instructions, message)
+    raise RuntimeError("unknown_backend")
+
+
+def _call_backend_with_retries(backend: str, instructions: str, message: str) -> tuple[str, str, int]:
+    max_attempts = max(_env_int("HELPER_BACKEND_MAX_ATTEMPTS", 2), 1)
+    base_backoff = max(_env_float("HELPER_BACKOFF_SECONDS", 0.4), 0.0)
+
+    last_exc: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            text, model_used = _invoke_backend(backend, instructions, message)
+            return text, model_used, attempt
+        except Exception as exc:
+            last_exc = exc
+            if attempt >= max_attempts or not _is_retryable_backend_error(exc):
+                raise
+            sleep_seconds = base_backoff * (2 ** (attempt - 1))
+            if sleep_seconds > 0:
+                time.sleep(sleep_seconds)
+
+    raise last_exc or RuntimeError("backend_error")
 
 
 def _resolve_reference_file(reference_key: str | None, reference_dir: str, reference_map_raw: str) -> str:
@@ -241,22 +327,60 @@ def chat(request):
     - This endpoint is not yet tied to class materials (RAG planned).
     - Caddy routes /helper/* to this service.
     """
-    actor = _actor_key(request)
-    if not actor:
-        return JsonResponse({"error": "unauthorized"}, status=401)
+    started_at = time.monotonic()
+    request_id = _request_id(request)
+    actor = build_staff_or_student_actor_key(request)
+    actor_type = actor.split(":", 1)[0] if actor else "anonymous"
+    client_ip = client_ip_from_request(
+        request,
+        trust_proxy_headers=getattr(settings, "REQUEST_SAFETY_TRUST_PROXY_HEADERS", True),
+        xff_index=getattr(settings, "REQUEST_SAFETY_XFF_INDEX", 0),
+    )
 
-    client_ip = _client_ip(request)
-    actor_limit = int(os.getenv("HELPER_RATE_LIMIT_PER_MINUTE", "30"))
-    ip_limit = int(os.getenv("HELPER_RATE_LIMIT_PER_IP_PER_MINUTE", "90"))
-    if not _rate_limit(f"rl:actor:{actor}:m", limit=actor_limit, window_seconds=60):
-        return JsonResponse({"error": "rate_limited"}, status=429)
-    if not _rate_limit(f"rl:ip:{client_ip}:m", limit=ip_limit, window_seconds=60):
-        return JsonResponse({"error": "rate_limited"}, status=429)
+    if not actor:
+        _log_chat_event("warning", "unauthorized", request_id=request_id, actor_type=actor_type, ip=client_ip)
+        return _json_response({"error": "unauthorized"}, status=401, request_id=request_id)
+
+    # Append-only event in classhub table (metadata-only; never raw prompt text).
+    try:
+        classroom_id = int(request.session.get("class_id") or 0)
+    except Exception:
+        classroom_id = 0
+    try:
+        student_id = int(request.session.get("student_id") or 0)
+    except Exception:
+        student_id = 0
+    emit_helper_chat_access_event(
+        classroom_id=classroom_id,
+        student_id=student_id,
+        ip_address=client_ip,
+        details={"request_id": request_id, "actor_type": actor_type},
+    )
+
+    actor_limit = _env_int("HELPER_RATE_LIMIT_PER_MINUTE", 30)
+    ip_limit = _env_int("HELPER_RATE_LIMIT_PER_IP_PER_MINUTE", 90)
+    if not fixed_window_allow(
+        f"rl:actor:{actor}:m",
+        limit=actor_limit,
+        window_seconds=60,
+        cache_backend=cache,
+    ):
+        _log_chat_event("warning", "rate_limited_actor", request_id=request_id, actor_type=actor_type, ip=client_ip)
+        return _json_response({"error": "rate_limited"}, status=429, request_id=request_id)
+    if not fixed_window_allow(
+        f"rl:ip:{client_ip}:m",
+        limit=ip_limit,
+        window_seconds=60,
+        cache_backend=cache,
+    ):
+        _log_chat_event("warning", "rate_limited_ip", request_id=request_id, actor_type=actor_type, ip=client_ip)
+        return _json_response({"error": "rate_limited"}, status=429, request_id=request_id)
 
     try:
         payload = json.loads(request.body.decode("utf-8"))
     except Exception:
-        return JsonResponse({"error": "bad_json"}, status=400)
+        _log_chat_event("warning", "bad_json", request_id=request_id, actor_type=actor_type, ip=client_ip)
+        return _json_response({"error": "bad_json"}, status=400, request_id=request_id)
 
     context_value = payload.get("context")
     topics_value = payload.get("topics")
@@ -264,7 +388,7 @@ def chat(request):
     reference_key = payload.get("reference")
     message = (payload.get("message") or "").strip()
     if not message:
-        return JsonResponse({"error": "missing_message"}, status=400)
+        return _json_response({"error": "missing_message"}, status=400, request_id=request_id)
 
     # Bound size + redact obvious PII patterns
     message = _redact(message)[:8000]
@@ -288,29 +412,39 @@ def chat(request):
     env_keywords = _parse_csv_list(os.getenv("HELPER_TEXT_LANGUAGE_KEYWORDS", ""))
     lang_keywords = env_keywords or DEFAULT_TEXT_LANGUAGE_KEYWORDS
     if _contains_text_language(message, lang_keywords) and _is_scratch_context(context_value or "", topics, reference_text):
-        return JsonResponse({
-            "text": (
-                "We’re using Scratch blocks in this class, not text programming languages. "
-                "Tell me which Scratch block or part of your project you’re stuck on, "
-                "and I’ll help you with the Scratch version."
-            ),
-            "model": "",
-            "backend": backend,
-            "strictness": strictness,
-        })
-    if allowed_topics:
-        filter_mode = (os.getenv("HELPER_TOPIC_FILTER_MODE", "soft") or "soft").lower()
-        if filter_mode == "strict" and not _allowed_topic_overlap(message, allowed_topics):
-            return JsonResponse({
+        _log_chat_event("info", "policy_redirect_text_language", request_id=request_id, actor_type=actor_type, backend=backend)
+        return _json_response(
+            {
                 "text": (
-                    "Let’s keep this focused on today’s lesson topics: "
-                    + ", ".join(allowed_topics)
-                    + ". Which part of that do you need help with?"
+                    "We’re using Scratch blocks in this class, not text programming languages. "
+                    "Tell me which Scratch block or part of your project you’re stuck on, "
+                    "and I’ll help you with the Scratch version."
                 ),
                 "model": "",
                 "backend": backend,
                 "strictness": strictness,
-            })
+                "attempts": 0,
+            },
+            request_id=request_id,
+        )
+    if allowed_topics:
+        filter_mode = (os.getenv("HELPER_TOPIC_FILTER_MODE", "soft") or "soft").lower()
+        if filter_mode == "strict" and not _allowed_topic_overlap(message, allowed_topics):
+            _log_chat_event("info", "policy_redirect_allowed_topics", request_id=request_id, actor_type=actor_type, backend=backend)
+            return _json_response(
+                {
+                    "text": (
+                        "Let’s keep this focused on today’s lesson topics: "
+                        + ", ".join(allowed_topics)
+                        + ". Which part of that do you need help with?"
+                    ),
+                    "model": "",
+                    "backend": backend,
+                    "strictness": strictness,
+                    "attempts": 0,
+                },
+                request_id=request_id,
+            )
     instructions = build_instructions(
         strictness,
         context=context_value or "",
@@ -320,38 +454,74 @@ def chat(request):
         reference_text=reference_text,
     )
 
-    max_concurrency = int(os.getenv("HELPER_MAX_CONCURRENCY", "2"))
-    max_wait = float(os.getenv("HELPER_QUEUE_MAX_WAIT_SECONDS", "10"))
-    poll = float(os.getenv("HELPER_QUEUE_POLL_SECONDS", "0.2"))
-    ttl = int(os.getenv("HELPER_QUEUE_SLOT_TTL_SECONDS", "120"))
-    slot_key, token = acquire_slot(max_concurrency, max_wait, poll, ttl)
-    if not slot_key:
-        return JsonResponse({"error": "busy"}, status=503)
+    if _backend_circuit_is_open(backend):
+        _log_chat_event("warning", "backend_circuit_open", request_id=request_id, backend=backend)
+        return _json_response({"error": "backend_unavailable"}, status=503, request_id=request_id)
 
+    max_concurrency = _env_int("HELPER_MAX_CONCURRENCY", 2)
+    max_wait = _env_float("HELPER_QUEUE_MAX_WAIT_SECONDS", 10.0)
+    poll = _env_float("HELPER_QUEUE_POLL_SECONDS", 0.2)
+    ttl = _env_int("HELPER_QUEUE_SLOT_TTL_SECONDS", 120)
+    queue_started_at = time.monotonic()
+    slot_key, token = acquire_slot(max_concurrency, max_wait, poll, ttl)
+    queue_wait_ms = int((time.monotonic() - queue_started_at) * 1000)
+    if not slot_key:
+        _log_chat_event(
+            "warning",
+            "queue_busy",
+            request_id=request_id,
+            actor_type=actor_type,
+            backend=backend,
+            queue_wait_ms=queue_wait_ms,
+        )
+        return _json_response({"error": "busy"}, status=503, request_id=request_id)
+
+    attempts_used = 0
+    model_used = ""
     try:
-        if backend == "ollama":
-            model = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
-            base_url = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
-            text, model_used = _ollama_chat(base_url, model, instructions, message)
-        elif backend == "openai":
-            model = os.getenv("OPENAI_MODEL", "gpt-5.2")
-            text, model_used = _openai_chat(model, instructions, message)
-        else:
-            return JsonResponse({"error": "unknown_backend"}, status=500)
+        text, model_used, attempts_used = _call_backend_with_retries(backend, instructions, message)
     except RuntimeError as exc:
+        _record_backend_failure(backend)
         if str(exc) == "openai_not_installed":
-            return JsonResponse({"error": "openai_not_installed"}, status=500)
-        return JsonResponse({"error": "backend_error"}, status=502)
+            _log_chat_event("error", "openai_not_installed", request_id=request_id, backend=backend)
+            return _json_response({"error": "openai_not_installed"}, status=500, request_id=request_id)
+        if str(exc) == "unknown_backend":
+            _log_chat_event("error", "unknown_backend", request_id=request_id, backend=backend)
+            return _json_response({"error": "unknown_backend"}, status=500, request_id=request_id)
+        _log_chat_event("error", "backend_runtime_error", request_id=request_id, backend=backend, error_type=exc.__class__.__name__)
+        return _json_response({"error": "backend_error"}, status=502, request_id=request_id)
     except (urllib.error.URLError, urllib.error.HTTPError, ValueError):
-        return JsonResponse({"error": "ollama_error"}, status=502)
+        _record_backend_failure(backend)
+        _log_chat_event("error", "backend_transport_error", request_id=request_id, backend=backend)
+        return _json_response({"error": "ollama_error"}, status=502, request_id=request_id)
     except Exception:
-        return JsonResponse({"error": "backend_error"}, status=502)
+        _record_backend_failure(backend)
+        _log_chat_event("error", "backend_error", request_id=request_id, backend=backend)
+        return _json_response({"error": "backend_error"}, status=502, request_id=request_id)
     finally:
         release_slot(slot_key, token)
 
-    return JsonResponse({
-        "text": text or "",
-        "model": model_used,
-        "backend": backend,
-        "strictness": strictness,
-    })
+    _reset_backend_failure_state(backend)
+    total_ms = int((time.monotonic() - started_at) * 1000)
+    _log_chat_event(
+        "info",
+        "success",
+        request_id=request_id,
+        actor_type=actor_type,
+        backend=backend,
+        attempts=attempts_used,
+        queue_wait_ms=queue_wait_ms,
+        total_ms=total_ms,
+    )
+    return _json_response(
+        {
+            "text": text or "",
+            "model": model_used,
+            "backend": backend,
+            "strictness": strictness,
+            "attempts": attempts_used,
+            "queue_wait_ms": queue_wait_ms,
+            "total_ms": total_ms,
+        },
+        request_id=request_id,
+    )
