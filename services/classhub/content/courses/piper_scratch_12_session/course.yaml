@@ -23,7 +23,7 @@ lessons:
     helper_reference: s02-piper-desktop-basics
   - session: 3
     slug: s03-storymode-confidence
-    title: "Game Rules: Score + Collectibles"
+    title: "Runway Session: StoryMode Controls + Confidence"
     file: lessons/03-storymode-confidence.md
     helper_reference: s03-storymode-confidence
   - session: 4
