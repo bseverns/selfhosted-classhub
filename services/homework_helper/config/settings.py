@@ -18,7 +18,9 @@ env = environ.Env(
 )
 
 DEBUG = env.bool("DJANGO_DEBUG", default=False)
-SECRET_KEY = env("DJANGO_SECRET_KEY", default="dev-only-change-me")
+SECRET_KEY = env("DJANGO_SECRET_KEY", default="").strip()
+if not SECRET_KEY:
+    raise RuntimeError("DJANGO_SECRET_KEY is required")
 ALLOWED_HOSTS = [h.strip() for h in env("DJANGO_ALLOWED_HOSTS", default="localhost,127.0.0.1").split(",") if h.strip()]
 
 CSRF_TRUSTED_ORIGINS = []

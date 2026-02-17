@@ -1,4 +1,4 @@
-# Self‑Hosted Class Hub + Homework Helper (Django)
+# Self-Hosted Class Hub + Homework Helper (Django)
 
 A lightweight, self-hosted LMS focused on reliable classroom operations.
 
@@ -27,25 +27,31 @@ Detailed architecture: `docs/ARCHITECTURE.md`
 cp compose/.env.example compose/.env
 ```
 
-2. Build and run:
+2. Set routing template in `compose/.env`:
+
+```env
+CADDYFILE_TEMPLATE=Caddyfile.local
+```
+
+3. Build and run:
 
 ```bash
 cd compose
 docker compose up -d --build
 ```
 
-3. Create initial admin:
+4. Create initial admin:
 
 ```bash
 docker compose exec classhub_web python manage.py createsuperuser
 ```
 
-4. Verify health:
+5. Verify health:
 
 - `http://localhost/healthz`
 - `http://localhost/helper/healthz`
 
-## Documentation entrypoint
+## Docs entrypoint
 
 Start with `docs/START_HERE.md` for role-specific paths:
 - Operator

@@ -19,6 +19,9 @@ from common.request_safety import (
     fixed_window_allow,
 )
 
+from django.db import connection
+from django.db.utils import OperationalError, ProgrammingError
+
 from .policy import build_instructions
 from .queueing import acquire_slot, release_slot
 from .classhub_events import emit_helper_chat_access_event
@@ -127,17 +130,84 @@ def _reset_backend_failure_state(backend: str) -> None:
     cache.delete(_backend_circuit_key(backend))
 
 
-def _redact(text: str) -> str:
-    """Very light redaction.
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except Exception:
+        return default
 
-    Goal: reduce accidental PII in prompts.
-    Not a complete privacy solution.
-    """
-    text = EMAIL_RE.sub("[REDACTED_EMAIL]", text)
-    text = PHONE_RE.sub("[REDACTED_PHONE]", text)
-    return text
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except Exception:
+        return default
 
 
+def _request_id(request) -> str:
+    header_value = (request.META.get("HTTP_X_REQUEST_ID", "") or "").strip()
+    if header_value:
+        return header_value[:80]
+    return uuid.uuid4().hex
+
+
+def _json_response(payload: dict, *, request_id: str, status: int = 200) -> JsonResponse:
+    body = dict(payload or {})
+    body.setdefault("request_id", request_id)
+    resp = JsonResponse(body, status=status)
+    resp["X-Request-ID"] = request_id
+    return resp
+
+
+def _log_chat_event(level: str, event: str, *, request_id: str, **fields):
+    row = {"event": event, "request_id": request_id, **fields}
+    line = json.dumps(row, sort_keys=True, default=str)
+    if level == "warning":
+        logger.warning(line)
+    elif level == "error":
+        logger.error(line)
+    else:
+        logger.info(line)
+
+
+def _backend_circuit_key(backend: str) -> str:
+    return f"helper:circuit_open:{backend}"
+
+def _student_session_exists(student_id: int, class_id: int) -> bool:
+    """Validate student session against shared Class Hub table when available."""
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT 1 FROM hub_studentidentity WHERE id = %s AND classroom_id = %s LIMIT 1",
+                [student_id, class_id],
+            )
+            return cursor.fetchone() is not None
+    except (OperationalError, ProgrammingError):
+        # If the Class Hub table is not reachable in this helper deployment,
+        # rely on session presence as the MVP boundary.
+        return True
+
+
+def _actor_key(request) -> str:
+    user = getattr(request, "user", None)
+    if user and user.is_authenticated and user.is_staff:
+        return f"staff:{user.id}"
+
+    student_id = request.session.get("student_id")
+    class_id = request.session.get("class_id")
+    if not (student_id and class_id):
+        return ""
+
+    if not _student_session_exists(student_id, class_id):
+        return ""
+
+    return f"student:{class_id}:{student_id}"
 def _ollama_chat(base_url: str, model: str, instructions: str, message: str) -> tuple[str, str]:
     url = base_url.rstrip("/") + "/api/chat"
     temperature = float(os.getenv("OLLAMA_TEMPERATURE", "0.2"))
@@ -329,7 +399,7 @@ def chat(request):
     """
     started_at = time.monotonic()
     request_id = _request_id(request)
-    actor = build_staff_or_student_actor_key(request)
+    actor = _actor_key(request)
     actor_type = actor.split(":", 1)[0] if actor else "anonymous"
     client_ip = client_ip_from_request(
         request,
@@ -488,12 +558,24 @@ def chat(request):
         if str(exc) == "unknown_backend":
             _log_chat_event("error", "unknown_backend", request_id=request_id, backend=backend)
             return _json_response({"error": "unknown_backend"}, status=500, request_id=request_id)
-        _log_chat_event("error", "backend_runtime_error", request_id=request_id, backend=backend, error_type=exc.__class__.__name__)
+        _log_chat_event(
+            "error",
+            "backend_runtime_error",
+            request_id=request_id,
+            backend=backend,
+            error_type=exc.__class__.__name__,
+        )
         return _json_response({"error": "backend_error"}, status=502, request_id=request_id)
-    except (urllib.error.URLError, urllib.error.HTTPError, ValueError):
+    except (urllib.error.URLError, urllib.error.HTTPError):
         _record_backend_failure(backend)
         _log_chat_event("error", "backend_transport_error", request_id=request_id, backend=backend)
-        return _json_response({"error": "ollama_error"}, status=502, request_id=request_id)
+        if backend == "ollama":
+            return _json_response({"error": "ollama_error"}, status=502, request_id=request_id)
+        return _json_response({"error": "backend_error"}, status=502, request_id=request_id)
+    except ValueError:
+        _record_backend_failure(backend)
+        _log_chat_event("error", "backend_parse_error", request_id=request_id, backend=backend)
+        return _json_response({"error": "backend_error"}, status=502, request_id=request_id)
     except Exception:
         _record_backend_failure(backend)
         _log_chat_event("error", "backend_error", request_id=request_id, backend=backend)

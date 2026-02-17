@@ -158,8 +158,8 @@ class StudentIdentity(models.Model):
         ]
         # Speeds up joins/searches by class + display name/return code.
         indexes = [
-            models.Index(fields=["classroom", "display_name"]),
-            models.Index(fields=["classroom", "return_code"]),
+            models.Index(fields=["classroom", "display_name"], name="hub_studeni_classro_11dfba_idx"),
+            models.Index(fields=["classroom", "return_code"], name="hub_studeni_classro_3c11ef_idx"),
         ]
 
     def __str__(self) -> str:
@@ -211,9 +211,9 @@ class StudentEvent(models.Model):
     class Meta:
         ordering = ["-created_at", "-id"]
         indexes = [
-            models.Index(fields=["event_type", "created_at"]),
-            models.Index(fields=["classroom", "created_at"]),
-            models.Index(fields=["student", "created_at"]),
+            models.Index(fields=["event_type", "created_at"], name="hub_studente_event_t_e17920_idx"),
+            models.Index(fields=["classroom", "created_at"], name="hub_studente_classro_d3d6f9_idx"),
+            models.Index(fields=["student", "created_at"], name="hub_studente_student_43a607_idx"),
         ]
 
     def save(self, *args, **kwargs):
@@ -300,7 +300,10 @@ class LessonVideo(models.Model):
     class Meta:
         ordering = ["order_index", "id"]
         indexes = [
-            models.Index(fields=["course_slug", "lesson_slug", "is_active"]),
+            models.Index(
+                fields=["course_slug", "lesson_slug", "is_active"],
+                name="hub_lessonv_course__be98cb_idx",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -333,7 +336,10 @@ class LessonRelease(models.Model):
             ),
         ]
         indexes = [
-            models.Index(fields=["classroom", "course_slug", "lesson_slug"]),
+            models.Index(
+                fields=["classroom", "course_slug", "lesson_slug"],
+                name="hub_lessonr_classro_0a0884_idx",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -396,9 +402,9 @@ class AuditEvent(models.Model):
     class Meta:
         ordering = ["-created_at", "-id"]
         indexes = [
-            models.Index(fields=["created_at"]),
-            models.Index(fields=["action", "created_at"]),
-            models.Index(fields=["classroom", "created_at"]),
+            models.Index(fields=["created_at"], name="hub_auditev_created_d7d36a_idx"),
+            models.Index(fields=["action", "created_at"], name="hub_auditev_action__2026ec_idx"),
+            models.Index(fields=["classroom", "created_at"], name="hub_auditev_classro_04f2a6_idx"),
         ]
 
     def __str__(self) -> str:

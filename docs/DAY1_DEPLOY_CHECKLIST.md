@@ -34,12 +34,61 @@ See `scripts/bootstrap_day1.sh` for an automated starter.
   - `/teach`
   - `/teach/lessons`
 
-## Domain later
-If you do not have a domain yet:
-- use `compose/Caddyfile.local` (HTTP on :80)
+## Routing mode switch (local vs domain)
+Use `.env` as the single selector (no ad-hoc file renames):
 
-When a domain exists:
-- set `DOMAIN=...` in `.env`
-- point DNS A record to server
-- copy `compose/Caddyfile.domain` → `compose/Caddyfile`
-- Caddy will obtain TLS certificates automatically
+- Local/day-1 mode:
+  - `CADDYFILE_TEMPLATE=Caddyfile.local`
+  - `DOMAIN` can stay placeholder
+- Domain/TLS mode:
+  - `CADDYFILE_TEMPLATE=Caddyfile.domain`
+  - set real `DOMAIN=...`
+  - point DNS A/AAAA record to server
+
+Then deploy/reload:
+
+```bash
+cd compose
+docker compose -f docker-compose.yml up -d --build
+```
+
+If you need a manual fallback (older docs/scripts), use explicit copy commands:
+
+```bash
+cp compose/Caddyfile.local compose/Caddyfile
+cp compose/Caddyfile.domain compose/Caddyfile
+```
+
+PowerShell equivalents:
+
+```powershell
+Copy-Item compose/Caddyfile.local compose/Caddyfile -Force
+Copy-Item compose/Caddyfile.domain compose/Caddyfile -Force
+```
+
+## Verification commands (run in both modes)
+
+Local mode expectations (`CADDYFILE_TEMPLATE=Caddyfile.local`):
+
+```bash
+cd compose
+docker compose ps
+curl -i http://localhost/healthz
+curl -i http://localhost/helper/healthz
+curl -I http://localhost/
+```
+
+Expected behavior: health endpoints return `200` on `http://localhost`; no TLS required.
+
+Domain mode expectations (`CADDYFILE_TEMPLATE=Caddyfile.domain`):
+
+```bash
+cd compose
+docker compose ps
+curl -i https://$DOMAIN/healthz
+curl -i https://$DOMAIN/helper/healthz
+curl -I http://$DOMAIN/
+curl -I https://$DOMAIN/
+```
+
+Expected behavior: HTTPS endpoints return `200`; HTTP redirects to HTTPS (`301`/`308`).

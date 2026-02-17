@@ -6,7 +6,10 @@ services:
     ports: ["80:80", "443:443"]
     env_file: [.env]
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Routing mode selector:
+      # - CADDYFILE_TEMPLATE=Caddyfile.local  (HTTP on localhost/day-1)
+      # - CADDYFILE_TEMPLATE=Caddyfile.domain (real domain + automatic TLS)
+      - ./${CADDYFILE_TEMPLATE:-Caddyfile.local}:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

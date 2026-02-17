@@ -1004,6 +1004,7 @@ def material_upload(request, material_id: int):
 
     error = ""
     response_status = 200
+    form = SubmissionUploadForm()
 
     # If lesson is still locked, GET shows message and POST is rejected (403).
     if release_state.get("is_locked"):
@@ -1041,9 +1042,6 @@ def material_upload(request, material_id: int):
                     note=note,
                 )
                 return redirect(f"/material/{material.id}/upload")
-    else:
-        form = SubmissionUploadForm()
-
     submissions = Submission.objects.filter(material=material, student=request.student).all()
 
     return render(

@@ -44,8 +44,9 @@ Historical implementation logs and superseded decisions are archived by month in
 ## Routing mode: local vs domain Caddy configs
 
 **Current decision:**
-- Unknown/no domain: use `compose/Caddyfile.local` (HTTP/local mode).
-- Known domain: use `compose/Caddyfile.domain` and let Caddy manage TLS.
+- Unknown/no domain: use `compose/Caddyfile.local`.
+- Known domain: use `compose/Caddyfile.domain` with Caddy-managed TLS.
+- Template selection is explicit via `CADDYFILE_TEMPLATE` in `compose/.env`.
 
 **Why this remains active:**
 - Keeps local setup simple while preserving production-safe HTTPS behavior.
@@ -66,6 +67,24 @@ Historical implementation logs and superseded decisions are archived by month in
 **Current decision:**
 - Shared request-safety helpers are canonical for client IP parsing and burst/token limiting.
 - Helper chat requires either valid student classroom session context or authenticated staff context.
+## Secret handling: required env secrets
+
+**Current decision:**
+- `DJANGO_SECRET_KEY` is required in both services.
+- Secrets come from environment (`compose/.env` or deployment environment), never from committed defaults.
+- `.env.example` remains non-sensitive and documents required knobs.
+
+**Why this remains active:**
+- Prevents insecure fallback secret boot behavior.
+- Supports basic secret hygiene for self-hosted operations.
+
+## Helper access and rate limiting posture
+
+**Current decision:**
+- Helper chat requires either authenticated staff context or valid student classroom session context.
+- Student session validation checks classhub identity rows when table access is available, and fails open when classhub tables are unavailable.
+- Shared request-safety helpers are canonical for proxy-aware client IP parsing and cache-backed limiter behavior.
+- Helper admin follows superuser-only access, matching classhub admin posture.
 
 **Why this remains active:**
 - Prevents policy drift between services.
@@ -87,6 +106,7 @@ Historical implementation logs and superseded decisions are archived by month in
 **Current decision:**
 - Deploy path uses migration gate + smoke checks + deterministic compose invocation.
 - Caddy mount source must match the expected compose config file.
+- Regression coverage is required for helper auth/admin hardening and backend retry/circuit behavior.
 
 **Why this remains active:**
 - Prevents avoidable outages from config drift.
