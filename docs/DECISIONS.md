@@ -1,5 +1,21 @@
 # Decisions (living)
 
+## 2026-02-17 — Use env-driven Caddy template selection in Compose (local vs domain)
+
+**Why:**
+- Operators were switching routing modes by manually copying files, which is easy to forget and hard to audit.
+- We already keep `compose/Caddyfile.local` and `compose/Caddyfile.domain` as templates; selection should be explicit in `.env`.
+
+**Tradeoffs:**
+- Adds one more required env variable (`CADDYFILE_TEMPLATE`) for routing control.
+- Legacy scripts that assume a concrete `compose/Caddyfile` may still need fallback copy commands.
+
+**Plan:**
+- Mount `./${CADDYFILE_TEMPLATE}` in `docker-compose.yml` for Caddy.
+- Document exact switch steps in `README.md` and `docs/DAY1_DEPLOY_CHECKLIST.md`.
+- Add verification command sequences and expected URL behavior for both modes.
+
+
 ## 2026-02-16 — Add teacher-managed lesson asset library (folders + files)
 
 **Why:**
