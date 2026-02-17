@@ -11,6 +11,9 @@ from django.core.cache import cache
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET, require_POST
 
+from django.db import connection
+from django.db.utils import OperationalError, ProgrammingError
+
 from .policy import build_instructions
 from .queueing import acquire_slot, release_slot
 
@@ -85,15 +88,35 @@ def _client_ip(request) -> str:
     return "unknown"
 
 
+def _student_session_exists(student_id: int, class_id: int) -> bool:
+    """Validate student session against shared Class Hub table when available."""
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT 1 FROM hub_studentidentity WHERE id = %s AND classroom_id = %s LIMIT 1",
+                [student_id, class_id],
+            )
+            return cursor.fetchone() is not None
+    except (OperationalError, ProgrammingError):
+        # If the Class Hub table is not reachable in this helper deployment,
+        # rely on session presence as the MVP boundary.
+        return True
+
+
 def _actor_key(request) -> str:
-    if request.user.is_authenticated and request.user.is_staff:
-        return f"staff:{request.user.id}"
+    user = getattr(request, "user", None)
+    if user and user.is_authenticated and user.is_staff:
+        return f"staff:{user.id}"
 
     student_id = request.session.get("student_id")
     class_id = request.session.get("class_id")
-    if student_id and class_id:
-        return f"student:{class_id}:{student_id}"
-    return ""
+    if not (student_id and class_id):
+        return ""
+
+    if not _student_session_exists(student_id, class_id):
+        return ""
+
+    return f"student:{class_id}:{student_id}"
 
 
 def _ollama_chat(base_url: str, model: str, instructions: str, message: str) -> tuple[str, str]:
@@ -342,8 +365,12 @@ def chat(request):
         if str(exc) == "openai_not_installed":
             return JsonResponse({"error": "openai_not_installed"}, status=500)
         return JsonResponse({"error": "backend_error"}, status=502)
-    except (urllib.error.URLError, urllib.error.HTTPError, ValueError):
-        return JsonResponse({"error": "ollama_error"}, status=502)
+    except (urllib.error.URLError, urllib.error.HTTPError):
+        if backend == "ollama":
+            return JsonResponse({"error": "ollama_error"}, status=502)
+        return JsonResponse({"error": "backend_error"}, status=502)
+    except ValueError:
+        return JsonResponse({"error": "backend_error"}, status=502)
     except Exception:
         return JsonResponse({"error": "backend_error"}, status=502)
     finally:

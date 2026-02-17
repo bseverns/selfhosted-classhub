@@ -23,7 +23,8 @@ Also included:
 
 ```bash
 cp compose/.env.example compose/.env
-# Set Ollama/OpenAI settings as needed (helper defaults to Ollama)
+# Set secrets + backend settings as needed (helper defaults to Ollama)
+# Required: DJANGO_SECRET_KEY (both services now fail fast if missing)
 ```
 
 2) Run the stack:
@@ -129,7 +130,7 @@ Note: Production should **not** load the dev override file. Use
 
 - Add content authoring UI (beyond admin)
 - Add RAG over class materials (pgvector) and citations in helper
-- Add optional “return code” for students who clear cookies
+- Add role-aware observability (structured request logs + helper latency/error dashboard)
 - Add Google SSO for teachers (student access can remain class-code)
 
 ## Repo-authored course packs (markdown)

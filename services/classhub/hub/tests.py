@@ -230,7 +230,7 @@ class LessonReleaseTests(TestCase):
             {"file": SimpleUploadedFile("project.sb3", b"dummy")},
         )
         self.assertEqual(resp.status_code, 403)
-        self.assertContains(resp, locked_until.isoformat())
+        self.assertContains(resp, locked_until.isoformat(), status_code=403)
 
 
 class JoinClassTests(TestCase):

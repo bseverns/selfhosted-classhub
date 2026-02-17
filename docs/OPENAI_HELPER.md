@@ -5,8 +5,8 @@ The helper service is a Django app that exposes:
 - `GET /helper/healthz`
 - `POST /helper/chat`
 
-By default, the helper is wired to a local LLM server (Ollama).
-OpenAI is supported as an **optional** backend, but is not required.
+By default, the helper is wired to a local LLM server (Ollama) for self-hosted reliability and predictable costs.
+OpenAI is supported as a production-ready backend via the **Responses API** and can be enabled with env switches.
 
 ## Backend selection
 

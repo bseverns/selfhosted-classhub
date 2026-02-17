@@ -1,5 +1,78 @@
 # Decisions (living)
 
+## 2026-02-17 — Add regression coverage for helper auth/admin hardening
+
+**Why:**
+- Helper auth/admin safeguards were added quickly and needed explicit tests to prevent future drift.
+- Without tests, stale-session rejection and helper admin superuser gating could regress silently.
+
+**Tradeoffs:**
+- Slightly larger helper test suite.
+- Uses lightweight mocking for DB-unavailable fallback behavior.
+
+**Plan:**
+- Add helper tests for stale student sessions (`_student_session_exists=False` => `401`).
+- Add helper tests for classhub-table-unavailable fallback (`ProgrammingError` => fail-open function behavior).
+- Add helper admin access tests (staff non-superuser denied; superuser allowed).
+
+## 2026-02-17 — Restore classhub test baseline after security hardening
+
+**Why:**
+- `classhub` test suite was failing on two baseline issues unrelated to feature intent:
+  - upload view lock-state path referenced `form` before assignment;
+  - file-backed model tests require a configured default Django storage backend.
+- A reliable test baseline is part of the repo's "boring infra" promise.
+
+**Tradeoffs:**
+- Slightly more explicit settings (`STORAGES["default"]`) in classhub config.
+- No behavior change for production uploads; this aligns tests with real runtime expectations.
+
+**Plan:**
+- Initialize `SubmissionUploadForm` before lock-state branching in `material_upload`.
+- Add `STORAGES["default"] = django.core.files.storage.FileSystemStorage` in classhub settings.
+- Re-run classhub tests to confirm regression closure.
+
+## 2026-02-17 — Fail fast when `DJANGO_SECRET_KEY` is missing in both services
+
+**Why:**
+- Silent fallback secrets are operationally dangerous: a stack can boot "fine" with an insecure key.
+- Demo and production environments should fail loudly when identity/session signing secrets are missing.
+
+**Tradeoffs:**
+- Fresh setup now hard-fails until `.env` is populated correctly.
+- Slightly less forgiving for quick local experiments.
+
+**Plan:**
+- Require `DJANGO_SECRET_KEY` in `services/classhub/config/settings.py` and `services/homework_helper/config/settings.py`.
+- Keep `.env.example` as the teaching scaffold and call out required secret setup in README.
+
+## 2026-02-17 — Harden helper actor validation and error labeling
+
+**Why:**
+- Helper auth should reject stale student sessions when shared DB tables are available.
+- Incident response needs accurate backend error labels; generic parsing errors should not be tagged as Ollama outages.
+
+**Tradeoffs:**
+- Helper now performs one lightweight DB existence check for student sessions.
+- On deployments without shared classhub schema access, helper gracefully falls back to session-only auth checks.
+
+**Plan:**
+- Validate `student_id` + `class_id` against `hub_studentidentity` when reachable.
+- Keep permissive fallback when table/schema is unavailable.
+- Restrict `ollama_error` responses to actual network/HTTP failures from Ollama paths.
+
+## 2026-02-17 — Align helper admin surface with classhub superuser-only policy
+
+**Why:**
+- Class Hub already gates Django admin behind superuser checks.
+- Helper service should mirror that boundary for consistency and least privilege.
+
+**Tradeoffs:**
+- Non-superuser staff can no longer access helper admin.
+
+**Plan:**
+- Apply a superuser-only `admin.site.has_permission` override in helper URLs.
+
 ## 2026-02-16 — Add teacher-managed lesson asset library (folders + files)
 
 **Why:**

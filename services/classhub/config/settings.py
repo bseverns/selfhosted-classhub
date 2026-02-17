@@ -26,7 +26,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Layout:
 #   services/classhub/content/courses/<course_slug>/course.yaml
 #   services/classhub/content/courses/<course_slug>/lessons/*.md
-CONTENT_ROOT = BASE_DIR / "content"
 env = environ.Env(
     DJANGO_DEBUG=(bool, False),
 )
@@ -37,7 +36,9 @@ CONTENT_ROOT = BASE_DIR / "content"
 CONTENT_COURSES_ROOT = CONTENT_ROOT / "courses"
 
 DEBUG = env.bool("DJANGO_DEBUG", default=False)
-SECRET_KEY = env("DJANGO_SECRET_KEY", default="dev-only-change-me")
+SECRET_KEY = env("DJANGO_SECRET_KEY", default="").strip()
+if not SECRET_KEY:
+    raise RuntimeError("DJANGO_SECRET_KEY is required")
 ALLOWED_HOSTS = [h.strip() for h in env("DJANGO_ALLOWED_HOSTS", default="localhost,127.0.0.1").split(",") if h.strip()]
 
 # Use when serving via domain + HTTPS so Django accepts browser CSRF tokens
@@ -120,9 +121,13 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STORAGES = {
+    # Default uploaded-file storage for submission and lesson media.
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-    }
+    },
 }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
