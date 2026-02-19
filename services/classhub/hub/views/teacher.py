@@ -1603,6 +1603,8 @@ def teach_material_submissions(request, material_id: int):
 __all__ = [
     "teacher_logout",
     "teach_home",
+    "teach_generate_authoring_templates",
+    "teach_download_authoring_template",
     "teach_lessons",
     "teach_set_lesson_release",
     "teach_create_class",
