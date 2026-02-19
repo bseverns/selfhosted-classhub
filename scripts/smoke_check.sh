@@ -60,6 +60,7 @@ HELPER_MESSAGE="${HELPER_MESSAGE:-Give one short Scratch hint about moving a spr
 CLASS_CODE="${SMOKE_CLASS_CODE:-$(env_file_value SMOKE_CLASS_CODE)}"
 TEACHER_USERNAME="${SMOKE_TEACHER_USERNAME:-$(env_file_value SMOKE_TEACHER_USERNAME)}"
 TEACHER_PASSWORD="${SMOKE_TEACHER_PASSWORD:-$(env_file_value SMOKE_TEACHER_PASSWORD)}"
+TEACHER_SESSION_KEY="${SMOKE_TEACHER_SESSION_KEY:-$(env_file_value SMOKE_TEACHER_SESSION_KEY)}"
 TIMEOUT_SECONDS="${SMOKE_TIMEOUT_SECONDS:-$(env_file_value SMOKE_TIMEOUT_SECONDS)}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-20}"
 
@@ -77,7 +78,8 @@ TMP_HELPER="$(mktemp)"
 TMP_HEADERS="$(mktemp)"
 TMP_TEACH="$(mktemp)"
 TMP_STUDENT_PAGE="$(mktemp)"
-trap 'rm -f "${COOKIE_JAR}" "${TMP_JOIN}" "${TMP_HELPER}" "${TMP_HEADERS}" "${TMP_TEACH}" "${TMP_STUDENT_PAGE}"' EXIT
+TMP_LOGIN="$(mktemp)"
+trap 'rm -f "${COOKIE_JAR}" "${TMP_JOIN}" "${TMP_HELPER}" "${TMP_HEADERS}" "${TMP_TEACH}" "${TMP_STUDENT_PAGE}" "${TMP_LOGIN}"' EXIT
 
 fail() {
   echo "[smoke] FAIL: $*" >&2
@@ -108,8 +110,12 @@ code="$(http_code "${BASE_URL}/helper/healthz")"
 echo "[smoke] /helper/healthz OK"
 
 require_field_if_strict "${CLASS_CODE}" "SMOKE_CLASS_CODE"
-require_field_if_strict "${TEACHER_USERNAME}" "SMOKE_TEACHER_USERNAME"
-require_field_if_strict "${TEACHER_PASSWORD}" "SMOKE_TEACHER_PASSWORD"
+if [[ -n "${TEACHER_SESSION_KEY}" ]]; then
+  require_field_if_strict "${TEACHER_SESSION_KEY}" "SMOKE_TEACHER_SESSION_KEY"
+else
+  require_field_if_strict "${TEACHER_USERNAME}" "SMOKE_TEACHER_USERNAME"
+  require_field_if_strict "${TEACHER_PASSWORD}" "SMOKE_TEACHER_PASSWORD"
+fi
 
 if [[ -n "${CLASS_CODE}" ]]; then
   curl "${CURL_FLAGS[@]}" -c "${COOKIE_JAR}" -b "${COOKIE_JAR}" "${BASE_URL}/" >/dev/null
@@ -155,25 +161,33 @@ if [[ -n "${CLASS_CODE}" ]]; then
   echo "[smoke] /helper/chat OK"
 fi
 
-if [[ -n "${TEACHER_USERNAME}" && -n "${TEACHER_PASSWORD}" ]]; then
-  curl "${CURL_FLAGS[@]}" -c "${COOKIE_JAR}" -b "${COOKIE_JAR}" "${BASE_URL}/admin/login/?next=/teach" >/dev/null
-  CSRF_TOKEN="$(awk '$6=="csrftoken"{print $7}' "${COOKIE_JAR}" | tail -n1)"
-  [[ -n "${CSRF_TOKEN}" ]] || fail "unable to get csrftoken for teacher login"
+if [[ -n "${TEACHER_SESSION_KEY}" || ( -n "${TEACHER_USERNAME}" && -n "${TEACHER_PASSWORD}" ) ]]; then
+  if [[ -n "${TEACHER_SESSION_KEY}" ]]; then
+    code="$(curl "${CURL_FLAGS[@]}" -o "${TMP_TEACH}" -w "%{http_code}" -b "sessionid=${TEACHER_SESSION_KEY}" "${BASE_URL}/teach")"
+    [[ "${code}" == "200" ]] || fail "/teach returned ${code} with supplied teacher session"
+    echo "[smoke] teacher session + /teach OK"
+  else
+    curl "${CURL_FLAGS[@]}" -c "${COOKIE_JAR}" -b "${COOKIE_JAR}" "${BASE_URL}/admin/login/?next=/teach" >/dev/null
+    CSRF_TOKEN="$(awk '$6=="csrftoken"{print $7}' "${COOKIE_JAR}" | tail -n1)"
+    [[ -n "${CSRF_TOKEN}" ]] || fail "unable to get csrftoken for teacher login"
 
-  code="$(curl "${CURL_FLAGS[@]}" -D "${TMP_HEADERS}" -o /dev/null -w "%{http_code}" \
-    -c "${COOKIE_JAR}" -b "${COOKIE_JAR}" \
-    -H "Referer: ${BASE_URL}/admin/login/?next=/teach" \
-    -X POST \
-    --data-urlencode "csrfmiddlewaretoken=${CSRF_TOKEN}" \
-    --data-urlencode "username=${TEACHER_USERNAME}" \
-    --data-urlencode "password=${TEACHER_PASSWORD}" \
-    --data-urlencode "next=/teach" \
-    "${BASE_URL}/admin/login/?next=/teach")"
-  [[ "${code}" == "302" || "${code}" == "303" ]] || fail "teacher login returned ${code}"
+    login_code="$(curl "${CURL_FLAGS[@]}" -D "${TMP_HEADERS}" -o "${TMP_LOGIN}" -w "%{http_code}" \
+      -c "${COOKIE_JAR}" -b "${COOKIE_JAR}" \
+      -H "Referer: ${BASE_URL}/admin/login/?next=/teach" \
+      -X POST \
+      --data-urlencode "csrfmiddlewaretoken=${CSRF_TOKEN}" \
+      --data-urlencode "username=${TEACHER_USERNAME}" \
+      --data-urlencode "password=${TEACHER_PASSWORD}" \
+      --data-urlencode "next=/teach" \
+      "${BASE_URL}/admin/login/?next=/teach")"
+    if [[ "${login_code}" != "200" && "${login_code}" != "302" && "${login_code}" != "303" ]]; then
+      fail "teacher login returned ${login_code}: $(cat "${TMP_LOGIN}")"
+    fi
 
-  code="$(curl "${CURL_FLAGS[@]}" -o "${TMP_TEACH}" -w "%{http_code}" -c "${COOKIE_JAR}" -b "${COOKIE_JAR}" "${BASE_URL}/teach")"
-  [[ "${code}" == "200" ]] || fail "/teach returned ${code} after login"
-  echo "[smoke] teacher login + /teach OK"
+    code="$(curl "${CURL_FLAGS[@]}" -o "${TMP_TEACH}" -w "%{http_code}" -c "${COOKIE_JAR}" -b "${COOKIE_JAR}" "${BASE_URL}/teach")"
+    [[ "${code}" == "200" ]] || fail "/teach returned ${code} after login attempt (login status ${login_code}): $(cat "${TMP_LOGIN}")"
+    echo "[smoke] teacher login + /teach OK"
+  fi
 fi
 
 echo "[smoke] ALL CHECKS PASSED"

@@ -143,6 +143,7 @@ Historical implementation logs and superseded decisions are archived by month in
 - Class Hub static assets are collected during image build; runtime boot path is migrations + gunicorn only.
 - Smoke checks default to `http://localhost` when `CADDYFILE_TEMPLATE=Caddyfile.local`, regardless of placeholder `SMOKE_BASE_URL` values in env examples.
 - CI doctor smoke uses `HELPER_LLM_BACKEND=mock` to keep `/helper/chat` deterministic without runtime model pull dependencies.
+- Golden smoke issues a server-side staff session key for `/teach` checks so admin-login form changes (OTP/superuser prompts) do not create false negatives.
 - Regression coverage is required for helper auth/admin hardening and backend retry/circuit behavior.
 
 **Why this remains active:**
@@ -152,6 +153,7 @@ Historical implementation logs and superseded decisions are archived by month in
 - Reduces startup-time healthcheck failures from long runtime `collectstatic` work.
 - Prevents CI from accidentally probing external placeholder domains while validating local compose stacks.
 - Prevents CI flakes when local model servers are reachable but model weights are not yet loaded.
+- Keeps strict smoke focused on route authorization outcomes instead of brittle intermediate login form internals.
 
 ## Teacher authoring templates
 

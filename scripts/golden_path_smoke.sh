@@ -214,11 +214,25 @@ else
     --active
 fi
 
+TEACHER_SESSION_KEY="$(
+  run_compose exec -T \
+    -e SMOKE_TEACHER_USERNAME="${TEACHER_USERNAME}" \
+    classhub_web \
+    python manage.py shell -c \
+    "import os; from django.contrib.auth import BACKEND_SESSION_KEY, HASH_SESSION_KEY, SESSION_KEY, get_user_model; from django.contrib.sessions.backends.db import SessionStore; User = get_user_model(); user = User.objects.get(username=os.environ['SMOKE_TEACHER_USERNAME']); session = SessionStore(); session[SESSION_KEY] = str(user.pk); session[BACKEND_SESSION_KEY] = 'django.contrib.auth.backends.ModelBackend'; session[HASH_SESSION_KEY] = user.get_session_auth_hash(); session.save(); print(session.session_key)"
+)"
+TEACHER_SESSION_KEY="$(echo "${TEACHER_SESSION_KEY}" | tr -d '\r' | tail -n1)"
+if [[ -z "${TEACHER_SESSION_KEY}" ]]; then
+  echo "[golden-smoke] failed to create teacher session for '${TEACHER_USERNAME}'" >&2
+  exit 1
+fi
+
 echo "[golden-smoke] running strict smoke checks"
 SMOKE_ENV=(
   "SMOKE_CLASS_CODE=${CLASS_CODE}"
   "SMOKE_TEACHER_USERNAME=${TEACHER_USERNAME}"
   "SMOKE_TEACHER_PASSWORD=${TEACHER_PASSWORD}"
+  "SMOKE_TEACHER_SESSION_KEY=${TEACHER_SESSION_KEY}"
   "SMOKE_TIMEOUT_SECONDS=${SMOKE_TIMEOUT_SECONDS}"
   "SMOKE_INSECURE_TLS=${SMOKE_INSECURE_TLS}"
   "SMOKE_HELPER_MESSAGE=${HELPER_MESSAGE}"
