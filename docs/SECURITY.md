@@ -14,13 +14,18 @@
   - `DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS=1` only if all subdomains are HTTPS-ready
 - Rate limit join + helper endpoints.
 - Helper chat requires either a student classroom session or staff-authenticated teacher session.
+- Student helper requests require signed `scope_token` metadata.
+- Unsigned `context/topics/reference/allowed_topics` payload fields are ignored by helper.
+- Set `HELPER_REQUIRE_SCOPE_TOKEN_FOR_STAFF=1` if you also want staff helper access to require signed scope tokens.
 - Same-device student rejoin uses a signed, HTTP-only cookie hint; cross-device recovery still uses return code.
 - Helper student session validation defaults to fail-open if classhub tables are unavailable; set `HELPER_REQUIRE_CLASSHUB_TABLE=1` in production to fail closed.
 - Local LLM inference keeps student queries on your infrastructure, but logs and
   prompt storage still require care.
 - Postgres/Redis remain internal to Docker networking; Ollama/MinIO host ports are localhost-bound.
 - Proxy request-body limits are enforced in Caddy (`CADDY_CLASSHUB_MAX_BODY`, `CADDY_HELPER_MAX_BODY`).
+- `REQUEST_SAFETY_TRUST_PROXY_HEADERS` defaults to `0` (safe-by-default). Set it to `1` only when a trusted first-hop proxy (for example Caddy) overwrites `X-Forwarded-*` headers.
 - Run `bash scripts/validate_env_secrets.sh` before production deploys.
+- CI security gates run in GitHub Actions via `.github/workflows/security.yml` (secret scan + dependency audit).
 - Optional malware scanning is available for student uploads:
   - `CLASSHUB_UPLOAD_SCAN_ENABLED=1`
   - `CLASSHUB_UPLOAD_SCAN_COMMAND` (for example `clamscan --no-summary --stdout`)
@@ -57,4 +62,17 @@
 ## Future
 - Google SSO for teachers
 - Separate DBs per service if needed
-- Roll CSP out in report-only mode first via `DJANGO_CSP_REPORT_ONLY_POLICY`
+
+## CSP rollout
+
+Use `DJANGO_CSP_REPORT_ONLY_POLICY` to stage policy rollout safely.
+
+Suggested rollout:
+1. Start with a permissive report-only baseline.
+2. Check browser console + report destinations for violations.
+3. Tighten directives iteratively.
+4. Move to enforced CSP only after classroom pages are clean.
+
+Starter example:
+
+`DJANGO_CSP_REPORT_ONLY_POLICY=default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'`

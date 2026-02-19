@@ -437,7 +437,7 @@ def _rate_limit(key: str, limit: int, window_seconds: int) -> bool:
 def _client_ip(request) -> str:
     return client_ip_from_request(
         request,
-        trust_proxy_headers=getattr(settings, "REQUEST_SAFETY_TRUST_PROXY_HEADERS", True),
+        trust_proxy_headers=getattr(settings, "REQUEST_SAFETY_TRUST_PROXY_HEADERS", False),
         xff_index=getattr(settings, "REQUEST_SAFETY_XFF_INDEX", 0),
     )
 

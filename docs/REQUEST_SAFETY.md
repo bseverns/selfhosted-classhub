@@ -32,8 +32,8 @@ Optional advanced limiter:
 Set once in `compose/.env` (applies to both services):
 
 - `REQUEST_SAFETY_TRUST_PROXY_HEADERS`
-  - `1` (default): trust `X-Forwarded-For`
-  - `0`: use only `REMOTE_ADDR`
+  - `0` (default): use only `REMOTE_ADDR`
+  - `1`: trust `X-Forwarded-For`
 - `REQUEST_SAFETY_XFF_INDEX`
   - default `0` (left-most IP in `X-Forwarded-For`)
   - use another index if your proxy chain requires it
@@ -52,7 +52,10 @@ in `common.request_safety`.
 
 ## Proxy note
 
+Keep `REQUEST_SAFETY_TRUST_PROXY_HEADERS=0` unless your immediate upstream proxy
+is trusted and overwrites `X-Forwarded-*` headers.
+
 The compose Caddy configs set `X-Forwarded-For`, `X-Real-IP`, and
 `X-Forwarded-Proto` from the immediate connection values before proxying to
-Django. This keeps rate-limit IP parsing deterministic when
-`REQUEST_SAFETY_TRUST_PROXY_HEADERS=1`.
+Django. When Caddy is your first hop, set `REQUEST_SAFETY_TRUST_PROXY_HEADERS=1`
+for deterministic rate-limit IP parsing.

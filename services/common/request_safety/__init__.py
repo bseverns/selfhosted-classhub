@@ -7,7 +7,7 @@ Canonical usage:
 - `build_staff_or_student_actor_key(...)` for optional per-actor limits.
 
 Canonical env knobs (documented in docs/REQUEST_SAFETY.md):
-- `REQUEST_SAFETY_TRUST_PROXY_HEADERS` (default: true)
+- `REQUEST_SAFETY_TRUST_PROXY_HEADERS` (default: false)
 - `REQUEST_SAFETY_XFF_INDEX` (default: 0; client-most IP in X-Forwarded-For)
 
 Service-specific limit knobs remain local to each service:
@@ -27,7 +27,7 @@ from django.core.cache import cache as default_cache
 def parse_client_ip(
     meta: Mapping[str, str],
     *,
-    trust_proxy_headers: bool = True,
+    trust_proxy_headers: bool = False,
     xff_index: int = 0,
     xff_header: str = "HTTP_X_FORWARDED_FOR",
 ) -> str:
@@ -67,7 +67,7 @@ def parse_client_ip(
 def client_ip_from_request(
     request,
     *,
-    trust_proxy_headers: bool = True,
+    trust_proxy_headers: bool = False,
     xff_index: int = 0,
     xff_header: str = "HTTP_X_FORWARDED_FOR",
 ) -> str:

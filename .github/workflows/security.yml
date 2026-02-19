@@ -1,0 +1,30 @@
+name: security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependency auditor
+        run: pip install pip-audit==2.8.0
+      - name: Audit classhub dependencies
+        run: pip-audit -r services/classhub/requirements.txt --progress-spinner off
+      - name: Audit helper dependencies
+        run: pip-audit -r services/homework_helper/requirements.txt --progress-spinner off

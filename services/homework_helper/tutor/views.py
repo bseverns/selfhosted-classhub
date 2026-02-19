@@ -321,14 +321,6 @@ def _contains_text_language(message: str, keywords: list[str]) -> bool:
     return any(keyword in lowered for keyword in keywords)
 
 
-def _normalize_allowed_topics(value) -> list[str]:
-    if isinstance(value, list):
-        return [str(v).strip() for v in value if str(v).strip()]
-    if isinstance(value, str):
-        return [v.strip() for v in value.split("|") if v.strip()]
-    return []
-
-
 def _tokenize(text: str) -> set[str]:
     parts = re.split(r"[^a-z0-9]+", text.lower())
     return {p for p in parts if len(p) >= 4}
@@ -387,7 +379,7 @@ def chat(request):
     actor_type = actor.split(":", 1)[0] if actor else "anonymous"
     client_ip = client_ip_from_request(
         request,
-        trust_proxy_headers=getattr(settings, "REQUEST_SAFETY_TRUST_PROXY_HEADERS", True),
+        trust_proxy_headers=getattr(settings, "REQUEST_SAFETY_TRUST_PROXY_HEADERS", False),
         xff_index=getattr(settings, "REQUEST_SAFETY_XFF_INDEX", 0),
     )
 
@@ -461,20 +453,21 @@ def chat(request):
             _log_chat_event("warning", "scope_token_invalid", request_id=request_id, actor_type=actor_type, ip=client_ip)
             return _json_response({"error": "invalid_scope_token"}, status=400, request_id=request_id)
     else:
-        # Staff can still use legacy/manual payloads for operational debugging.
-        # Students must send a signed scope token from Class Hub pages.
-        if actor_type == "student":
+        # Students must send signed scope metadata.
+        # Staff can optionally be forced to require signed scope metadata too.
+        require_scope_for_staff = bool(getattr(settings, "HELPER_REQUIRE_SCOPE_TOKEN_FOR_STAFF", False))
+        if actor_type == "student" or (actor_type == "staff" and require_scope_for_staff):
             _log_chat_event("warning", "scope_token_missing", request_id=request_id, actor_type=actor_type, ip=client_ip)
             return _json_response({"error": "missing_scope_token"}, status=400, request_id=request_id)
-
-        context_value = str(payload.get("context") or "").strip()
-        topics_value = payload.get("topics")
-        if isinstance(topics_value, str):
-            topics = [t.strip() for t in topics_value.split("|") if t.strip()]
-        elif isinstance(topics_value, list):
-            topics = [str(t).strip() for t in topics_value if str(t).strip()]
-        allowed_topics = _normalize_allowed_topics(payload.get("allowed_topics"))
-        reference_key = str(payload.get("reference") or "").strip()
+        # Do not trust unsigned, client-supplied scope fields.
+        if any(payload.get(k) for k in ("context", "topics", "allowed_topics", "reference")):
+            _log_chat_event(
+                "info",
+                "unsigned_scope_fields_ignored",
+                request_id=request_id,
+                actor_type=actor_type,
+                ip=client_ip,
+            )
 
     message = (payload.get("message") or "").strip()
     if not message:

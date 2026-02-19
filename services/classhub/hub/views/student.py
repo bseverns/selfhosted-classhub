@@ -158,7 +158,7 @@ def join_class(request):
 
     client_ip = client_ip_from_request(
         request,
-        trust_proxy_headers=getattr(settings, "REQUEST_SAFETY_TRUST_PROXY_HEADERS", True),
+        trust_proxy_headers=getattr(settings, "REQUEST_SAFETY_TRUST_PROXY_HEADERS", False),
         xff_index=getattr(settings, "REQUEST_SAFETY_XFF_INDEX", 0),
     )
     join_limit = int(getattr(settings, "JOIN_RATE_LIMIT_PER_MINUTE", 20))
@@ -461,7 +461,7 @@ def material_upload(request, material_id: int):
                         },
                         ip_address=client_ip_from_request(
                             request,
-                            trust_proxy_headers=getattr(settings, "REQUEST_SAFETY_TRUST_PROXY_HEADERS", True),
+                            trust_proxy_headers=getattr(settings, "REQUEST_SAFETY_TRUST_PROXY_HEADERS", False),
                             xff_index=getattr(settings, "REQUEST_SAFETY_XFF_INDEX", 0),
                         ),
                     )

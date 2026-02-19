@@ -170,8 +170,9 @@ Historical implementation logs and superseded decisions are archived by month in
 
 **Current decision:**
 - Class Hub now signs helper scope metadata (context/topics/allowed-topics/reference) and sends it as `scope_token`.
-- Homework Helper verifies `scope_token` server-side and ignores tamperable client scope fields when a token is present.
-- Student helper requests require a valid scope token; staff requests can still use legacy/manual scope payloads for operational debugging.
+- Homework Helper verifies `scope_token` server-side and ignores tamperable client scope fields.
+- Student helper requests require a valid scope token.
+- Staff can be forced to require scope tokens by setting `HELPER_REQUIRE_SCOPE_TOKEN_FOR_STAFF=1`.
 
 **Why this remains active:**
 - Prevents students from broadening helper scope by editing browser requests.
@@ -182,6 +183,7 @@ Historical implementation logs and superseded decisions are archived by month in
 **Current decision:**
 - Internal services remain private by default (Postgres/Redis internal network only; Ollama/MinIO host bindings are localhost-only).
 - Caddy explicitly sets forwarded IP/proto headers before proxying to Django.
+- Proxy-header trust is explicit opt-in (`REQUEST_SAFETY_TRUST_PROXY_HEADERS=0` by default).
 - Caddy enforces request-body limits per upstream (`CADDY_CLASSHUB_MAX_BODY`, `CADDY_HELPER_MAX_BODY`).
 - Both Django services can emit CSP in report-only mode via `DJANGO_CSP_REPORT_ONLY_POLICY`.
 - Both Django services reject weak/default secret keys when `DJANGO_DEBUG=0`.
@@ -189,6 +191,7 @@ Historical implementation logs and superseded decisions are archived by month in
 - Security headers and HTTPS controls are enabled in production through explicit env knobs (`DJANGO_SECURE_*`).
 - UI templates use local/system font stacks only (no Google Fonts network calls).
 - CI now guards against non-localhost published ports for internal services (`scripts/check_compose_port_exposure.py`).
+- CI now includes secret scanning and Python dependency vulnerability scanning (`.github/workflows/security.yml`).
 
 **Why this remains active:**
 - Reduces accidental public exposure of internal services.
@@ -198,6 +201,7 @@ Historical implementation logs and superseded decisions are archived by month in
 - Removes third-party font calls from student/teacher/admin page loads.
 - Makes CSP rollout incremental without breaking inline-heavy templates.
 - Prevents accidental internal service exposure regressions during future compose edits.
+- Keeps proxy trust assumptions explicit and reviewable in deploy configuration.
 
 ## Content parse caching
 

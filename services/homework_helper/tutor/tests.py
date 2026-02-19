@@ -147,6 +147,50 @@ class HelperChatAuthTests(TestCase):
         self.assertEqual(build_kwargs["context"], "Signed context")
         self.assertEqual(build_kwargs["topics"], ["signed topic"])
         self.assertEqual(build_kwargs["allowed_topics"], ["signed allowed"])
+
+    @patch("tutor.views._ollama_chat", return_value=("Hint", "fake-model"))
+    @patch("tutor.views.build_instructions", return_value="system instructions")
+    @patch.dict("os.environ", {"HELPER_LLM_BACKEND": "ollama"}, clear=False)
+    def test_staff_unsigned_scope_fields_are_ignored(self, build_instructions_mock, _chat_mock):
+        staff = get_user_model().objects.create_user(
+            username="teacher1",
+            password="pw12345",
+            is_staff=True,
+        )
+        self.client.force_login(staff)
+
+        resp = self._post_chat(
+            {
+                "message": "Help",
+                "context": "tampered context",
+                "topics": ["tampered topic"],
+                "allowed_topics": ["tampered allowed"],
+                "reference": "tampered_reference",
+            },
+            include_scope=False,
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.json().get("scope_verified"))
+        build_kwargs = build_instructions_mock.call_args.kwargs
+        self.assertEqual(build_kwargs["context"], "")
+        self.assertEqual(build_kwargs["topics"], [])
+        self.assertEqual(build_kwargs["allowed_topics"], [])
+
+    @override_settings(HELPER_REQUIRE_SCOPE_TOKEN_FOR_STAFF=True)
+    @patch("tutor.views._ollama_chat", return_value=("Hint", "fake-model"))
+    @patch.dict("os.environ", {"HELPER_LLM_BACKEND": "ollama"}, clear=False)
+    def test_staff_can_be_forced_to_require_scope_token(self, _chat_mock):
+        staff = get_user_model().objects.create_user(
+            username="teacher2",
+            password="pw12345",
+            is_staff=True,
+        )
+        self.client.force_login(staff)
+
+        resp = self._post_chat({"message": "Help"}, include_scope=False)
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json().get("error"), "missing_scope_token")
+
     @patch("tutor.views.emit_helper_chat_access_event")
     @patch("tutor.views._ollama_chat", return_value=("Try this step first.", "fake-model"))
     @patch.dict("os.environ", {"HELPER_LLM_BACKEND": "ollama"}, clear=False)

@@ -222,7 +222,8 @@ CLASSHUB_MARKDOWN_ALLOWED_IMAGE_HOSTS = [
     h.strip().lower() for h in _image_hosts_raw.split(",") if h.strip()
 ]
 # Shared request-safety controls for proxy-aware client IP extraction.
-REQUEST_SAFETY_TRUST_PROXY_HEADERS = env.bool("REQUEST_SAFETY_TRUST_PROXY_HEADERS", default=True)
+# Safe-by-default: only trust forwarded headers when explicitly enabled.
+REQUEST_SAFETY_TRUST_PROXY_HEADERS = env.bool("REQUEST_SAFETY_TRUST_PROXY_HEADERS", default=False)
 REQUEST_SAFETY_XFF_INDEX = env.int("REQUEST_SAFETY_XFF_INDEX", default=0)
 ADMIN_2FA_REQUIRED = env.bool("DJANGO_ADMIN_2FA_REQUIRED", default=True)
 CSP_REPORT_ONLY_POLICY = env("DJANGO_CSP_REPORT_ONLY_POLICY", default="").strip()

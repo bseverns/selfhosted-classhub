@@ -143,8 +143,10 @@ if not DEBUG:
     )
 
 # Shared request-safety controls for proxy-aware client IP extraction.
-REQUEST_SAFETY_TRUST_PROXY_HEADERS = env.bool("REQUEST_SAFETY_TRUST_PROXY_HEADERS", default=True)
+# Safe-by-default: only trust forwarded headers when explicitly enabled.
+REQUEST_SAFETY_TRUST_PROXY_HEADERS = env.bool("REQUEST_SAFETY_TRUST_PROXY_HEADERS", default=False)
 REQUEST_SAFETY_XFF_INDEX = env.int("REQUEST_SAFETY_XFF_INDEX", default=0)
 ADMIN_2FA_REQUIRED = env.bool("DJANGO_ADMIN_2FA_REQUIRED", default=True)
 HELPER_REQUIRE_CLASSHUB_TABLE = env.bool("HELPER_REQUIRE_CLASSHUB_TABLE", default=False)
+HELPER_REQUIRE_SCOPE_TOKEN_FOR_STAFF = env.bool("HELPER_REQUIRE_SCOPE_TOKEN_FOR_STAFF", default=False)
 CSP_REPORT_ONLY_POLICY = env("DJANGO_CSP_REPORT_ONLY_POLICY", default="").strip()
