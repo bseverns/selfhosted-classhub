@@ -51,6 +51,14 @@ DEFAULT_TEXT_LANGUAGE_KEYWORDS = [
 logger = logging.getLogger(__name__)
 
 
+def _redact(text: str) -> str:
+    """Apply lightweight redaction before model invocation/logging."""
+    value = str(text or "")
+    value = EMAIL_RE.sub("[REDACTED_EMAIL]", value)
+    value = PHONE_RE.sub("[REDACTED_PHONE]", value)
+    return value
+
+
 def _env_int(name: str, default: int) -> int:
     raw = os.getenv(name, "").strip()
     if not raw:

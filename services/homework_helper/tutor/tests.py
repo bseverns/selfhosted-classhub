@@ -38,6 +38,14 @@ class HelperChatAuthTests(TestCase):
         self.assertEqual(resp.status_code, 401)
         self.assertEqual(resp.json().get("error"), "unauthorized")
 
+    def test_redact_masks_email_and_phone(self):
+        raw = "Email me at student@example.org or call 612-555-0123 please."
+        redacted = views._redact(raw)
+        self.assertIn("[REDACTED_EMAIL]", redacted)
+        self.assertIn("[REDACTED_PHONE]", redacted)
+        self.assertNotIn("student@example.org", redacted)
+        self.assertNotIn("612-555-0123", redacted)
+
     @patch("tutor.views._ollama_chat", return_value=("Try this step first.", "fake-model"))
     @patch.dict("os.environ", {"HELPER_LLM_BACKEND": "ollama"}, clear=False)
     def test_chat_allows_student_session(self, _chat_mock):
@@ -49,6 +57,29 @@ class HelperChatAuthTests(TestCase):
         resp = self._post_chat({"message": "How do I move a sprite?"})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json().get("text"), "Try this step first.")
+
+    @patch("tutor.views._ollama_chat", return_value=("Try this step first.", "fake-model"))
+    @patch.dict("os.environ", {"HELPER_LLM_BACKEND": "ollama"}, clear=False)
+    def test_chat_redacts_message_before_backend_call(self, chat_mock):
+        session = self.client.session
+        session["student_id"] = 101
+        session["class_id"] = 5
+        session.save()
+
+        resp = self._post_chat(
+            {
+                "message": (
+                    "Need help with sprites. "
+                    "Contact student@example.org or 612-555-0123."
+                )
+            }
+        )
+        self.assertEqual(resp.status_code, 200)
+        backend_message = str(chat_mock.call_args[0][3])
+        self.assertIn("[REDACTED_EMAIL]", backend_message)
+        self.assertIn("[REDACTED_PHONE]", backend_message)
+        self.assertNotIn("student@example.org", backend_message)
+        self.assertNotIn("612-555-0123", backend_message)
 
     @patch("tutor.views._student_session_exists", return_value=False)
     def test_chat_rejects_stale_student_session(self, _exists_mock):
