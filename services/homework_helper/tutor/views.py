@@ -255,6 +255,13 @@ def _openai_chat(model: str, instructions: str, message: str) -> tuple[str, str]
     return (getattr(response, "output_text", "") or ""), model
 
 
+def _mock_chat() -> tuple[str, str]:
+    text = (os.getenv("HELPER_MOCK_RESPONSE_TEXT", "") or "").strip()
+    if not text:
+        text = "Let's solve this step by step. What did you try already?"
+    return text, "mock-tutor-v1"
+
+
 def _truncate_response_text(text: str) -> tuple[str, bool]:
     max_chars = _env_int("HELPER_RESPONSE_MAX_CHARS", 2200)
     if max_chars < 200:
@@ -285,6 +292,8 @@ def _invoke_backend(backend: str, instructions: str, message: str) -> tuple[str,
     if backend == "openai":
         model = os.getenv("OPENAI_MODEL", "gpt-5.2")
         return _openai_chat(model, instructions, message)
+    if backend == "mock":
+        return _mock_chat()
     raise RuntimeError("unknown_backend")
 
 

@@ -22,7 +22,7 @@ jobs:
           sed -i 's/^DJANGO_ALLOWED_HOSTS=.*/DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1/' compose/.env
           sed -i 's/^CSRF_TRUSTED_ORIGINS=.*/CSRF_TRUSTED_ORIGINS=http:\/\/localhost/' compose/.env
           sed -i 's/^SMOKE_BASE_URL=.*/SMOKE_BASE_URL=http:\/\/localhost/' compose/.env
-          sed -i 's/^HELPER_LLM_BACKEND=.*/HELPER_LLM_BACKEND=ollama/' compose/.env
+          sed -i 's/^HELPER_LLM_BACKEND=.*/HELPER_LLM_BACKEND=mock/' compose/.env
           sed -i 's/^HELPER_TOPIC_FILTER_MODE=.*/HELPER_TOPIC_FILTER_MODE=strict/' compose/.env
 
       - name: Run system doctor with golden-path smoke

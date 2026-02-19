@@ -13,7 +13,8 @@ OpenAI is supported as a production-ready backend via the **Responses API** and 
 Set the backend in `compose/.env`:
 
 ```bash
-HELPER_LLM_BACKEND=ollama   # or "openai"
+HELPER_LLM_BACKEND=ollama   # or "openai" or "mock" (CI/test only)
+HELPER_MOCK_RESPONSE_TEXT=
 HELPER_STRICTNESS=light     # or "strict"
 HELPER_SCOPE_MODE=strict    # or "soft"
 HELPER_REFERENCE_FILE=/app/tutor/reference/piper_scratch.md
@@ -72,6 +73,15 @@ OPENAI_MAX_OUTPUT_TOKENS=400
 ```
 
 `openai` is already included in `services/homework_helper/requirements.txt`.
+
+### Mock backend (CI/test)
+
+For deterministic CI smoke checks without external model dependencies:
+
+```bash
+HELPER_LLM_BACKEND=mock
+HELPER_MOCK_RESPONSE_TEXT=Optional fixed reply text
+```
 
 ## Tutor stance and strictness
 

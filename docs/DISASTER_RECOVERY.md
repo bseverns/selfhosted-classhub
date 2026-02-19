@@ -35,7 +35,7 @@ Core:
 - `CSRF_TRUSTED_ORIGINS`
 
 Helper:
-- `HELPER_LLM_BACKEND` (`ollama` or `openai`)
+- `HELPER_LLM_BACKEND` (`ollama` or `openai`; `mock` is CI/test-only)
 - `HELPER_STRICTNESS`, `HELPER_SCOPE_MODE`
 - `HELPER_REFERENCE_DIR`, `HELPER_REFERENCE_FILE`
 - `HELPER_REFERENCE_MAP` (optional)

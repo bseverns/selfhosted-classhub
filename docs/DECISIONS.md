@@ -142,6 +142,7 @@ Historical implementation logs and superseded decisions are archived by month in
 - Golden-path smoke can auto-provision fixtures via `scripts/golden_path_smoke.sh`.
 - Class Hub static assets are collected during image build; runtime boot path is migrations + gunicorn only.
 - Smoke checks default to `http://localhost` when `CADDYFILE_TEMPLATE=Caddyfile.local`, regardless of placeholder `SMOKE_BASE_URL` values in env examples.
+- CI doctor smoke uses `HELPER_LLM_BACKEND=mock` to keep `/helper/chat` deterministic without runtime model pull dependencies.
 - Regression coverage is required for helper auth/admin hardening and backend retry/circuit behavior.
 
 **Why this remains active:**
@@ -150,6 +151,7 @@ Historical implementation logs and superseded decisions are archived by month in
 - Reduces operator setup friction for smoke checks that previously depended on static credentials.
 - Reduces startup-time healthcheck failures from long runtime `collectstatic` work.
 - Prevents CI from accidentally probing external placeholder domains while validating local compose stacks.
+- Prevents CI flakes when local model servers are reachable but model weights are not yet loaded.
 
 ## Teacher authoring templates
 
