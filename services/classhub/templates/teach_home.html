@@ -64,6 +64,16 @@
         padding-left: 18px;
       }
       .download-list li { margin: 8px 0; }
+      .inline-copy {
+        margin-left: 8px;
+        padding: 4px 8px;
+        border-radius: 9px;
+        font-size: 12px;
+      }
+      .copy-status {
+        margin-top: 8px;
+        min-height: 18px;
+      }
     </style>
   </head>
   <body class="glass-theme teacher-comfort">
@@ -154,6 +164,7 @@
             <h2 style="margin:0">Classes</h2>
             <div class="muted">Tip: keep codes visible in-room, not in email.</div>
           </div>
+          <p id="copy-status" class="muted copy-status" role="status" aria-live="polite"></p>
 
           {% if classes %}
             <div class="table-wrap">
@@ -170,7 +181,10 @@
                   {% for c in classes %}
                     <tr>
                       <td><strong>{{ c.name }}</strong></td>
-                      <td><span class="pill">{{ c.join_code }}</span></td>
+                      <td>
+                        <span class="pill">{{ c.join_code }}</span>
+                        <button type="button" class="inline-copy" data-copy-value="{{ c.join_code }}">Copy</button>
+                      </td>
                       <td>
                         {% if c.is_locked %}
                           <span class="state-pill state-pill--locked">Locked</span>
@@ -178,7 +192,7 @@
                           <span class="state-pill state-pill--open">Open</span>
                         {% endif %}
                       </td>
-                      <td class="class-link"><a href="/teach/class/{{ c.id }}">Open</a> · <a href="/teach/lessons?class_id={{ c.id }}">Lessons</a></td>
+                      <td class="class-link"><a href="/teach/class/{{ c.id }}">Open</a> · <a href="/teach/lessons?class_id={{ c.id }}">Lessons</a> · <a href="/teach/class/{{ c.id }}/join-card" target="_blank" rel="noopener">Print join card</a></td>
                     </tr>
                   {% endfor %}
                 </tbody>
@@ -226,5 +240,36 @@
         </div>
       </main>
     </div>
+    <script>
+      (function () {
+        const status = document.getElementById("copy-status");
+        const buttons = document.querySelectorAll("[data-copy-value]");
+        if (!status || !buttons.length) return;
+        const copyText = async (text) => {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+            return;
+          }
+          const input = document.createElement("input");
+          input.value = text;
+          document.body.appendChild(input);
+          input.select();
+          document.execCommand("copy");
+          document.body.removeChild(input);
+        };
+        buttons.forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const value = btn.getAttribute("data-copy-value") || "";
+            if (!value) return;
+            try {
+              await copyText(value);
+              status.textContent = "Copied join code.";
+            } catch (err) {
+              status.textContent = "Copy failed. Please copy manually.";
+            }
+          });
+        });
+      })();
+    </script>
   </body>
 </html>

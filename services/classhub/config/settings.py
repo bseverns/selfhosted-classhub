@@ -39,6 +39,30 @@ DEBUG = env.bool("DJANGO_DEBUG", default=False)
 SECRET_KEY = env("DJANGO_SECRET_KEY", default="").strip()
 if not SECRET_KEY:
     raise RuntimeError("DJANGO_SECRET_KEY is required")
+
+
+def _secret_key_looks_unsafe(secret: str) -> bool:
+    normalized = secret.strip().lower()
+    blocked = {
+        "dev-secret",
+        "changeme",
+        "change_me",
+        "replace_me",
+        "replace_me_strong",
+        "secret",
+        "password",
+        "django-insecure",
+    }
+    if normalized in blocked or normalized.startswith("django-insecure"):
+        return True
+    if len(secret.strip()) < 32:
+        return True
+    return False
+
+
+if not DEBUG and _secret_key_looks_unsafe(SECRET_KEY):
+    raise RuntimeError("DJANGO_SECRET_KEY must be a strong non-default value when DJANGO_DEBUG=0")
+
 ALLOWED_HOSTS = [h.strip() for h in env("DJANGO_ALLOWED_HOSTS", default="localhost,127.0.0.1").split(",") if h.strip()]
 
 # Use when serving via domain + HTTPS so Django accepts browser CSRF tokens
@@ -49,12 +73,15 @@ if _origins:
     CSRF_TRUSTED_ORIGINS = [o.strip() for o in _origins.split(",") if o.strip()]
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
+    "config.apps.ClassHubAdminConfig",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django_otp",
+    "django_otp.plugins.otp_totp",
+    "django_otp.plugins.otp_static",
     "hub",
 ]
 
@@ -65,6 +92,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django_otp.middleware.OTPMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     # StudentSessionMiddleware relies on sessions.
@@ -157,12 +185,40 @@ JOIN_RATE_LIMIT_PER_MINUTE = env.int("CLASSHUB_JOIN_RATE_LIMIT_PER_MINUTE", defa
 # Cookie used for same-device student rejoin hints.
 DEVICE_REJOIN_COOKIE_NAME = env("CLASSHUB_DEVICE_REJOIN_COOKIE_NAME", default="classhub_student_hint")
 DEVICE_REJOIN_MAX_AGE_DAYS = env.int("CLASSHUB_DEVICE_REJOIN_MAX_AGE_DAYS", default=30)
+# Optional upload malware scanning (command-based, e.g., clamscan).
+CLASSHUB_UPLOAD_SCAN_ENABLED = env.bool("CLASSHUB_UPLOAD_SCAN_ENABLED", default=False)
+CLASSHUB_UPLOAD_SCAN_COMMAND = env(
+    "CLASSHUB_UPLOAD_SCAN_COMMAND",
+    default="clamscan --no-summary --stdout",
+).strip()
+CLASSHUB_UPLOAD_SCAN_TIMEOUT_SECONDS = env.int("CLASSHUB_UPLOAD_SCAN_TIMEOUT_SECONDS", default=20)
+# If true, block uploads when scanner errors/timeouts occur.
+CLASSHUB_UPLOAD_SCAN_FAIL_CLOSED = env.bool("CLASSHUB_UPLOAD_SCAN_FAIL_CLOSED", default=False)
+# Optional markdown image support with explicit host allowlist.
+CLASSHUB_MARKDOWN_ALLOW_IMAGES = env.bool("CLASSHUB_MARKDOWN_ALLOW_IMAGES", default=False)
+_image_hosts_raw = env("CLASSHUB_MARKDOWN_ALLOWED_IMAGE_HOSTS", default="")
+CLASSHUB_MARKDOWN_ALLOWED_IMAGE_HOSTS = [
+    h.strip().lower() for h in _image_hosts_raw.split(",") if h.strip()
+]
 # Shared request-safety controls for proxy-aware client IP extraction.
 REQUEST_SAFETY_TRUST_PROXY_HEADERS = env.bool("REQUEST_SAFETY_TRUST_PROXY_HEADERS", default=True)
 REQUEST_SAFETY_XFF_INDEX = env.int("REQUEST_SAFETY_XFF_INDEX", default=0)
+ADMIN_2FA_REQUIRED = env.bool("DJANGO_ADMIN_2FA_REQUIRED", default=True)
 
 # When behind Caddy, Django should respect forwarded proto for secure cookies.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # In production (DEBUG=False), session + CSRF cookies should only travel over HTTPS.
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
+
+if not DEBUG:
+    SECURE_SSL_REDIRECT = env.bool("DJANGO_SECURE_SSL_REDIRECT", default=False)
+    SECURE_HSTS_SECONDS = env.int("DJANGO_SECURE_HSTS_SECONDS", default=3600)
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool("DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS", default=False)
+    SECURE_HSTS_PRELOAD = env.bool("DJANGO_SECURE_HSTS_PRELOAD", default=False)
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = "DENY"
+    SECURE_REFERRER_POLICY = (
+        env("DJANGO_SECURE_REFERRER_POLICY", default="strict-origin-when-cross-origin").strip()
+        or "strict-origin-when-cross-origin"
+    )

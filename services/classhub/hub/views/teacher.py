@@ -24,6 +24,7 @@ from ..models import (
     LessonVideo,
     Material,
     Module,
+    StudentIdentity,
     Submission,
     gen_class_code,
 )
@@ -1156,7 +1157,17 @@ def teach_class_dashboard(request, class_id: int):
             submission_counts[row["material_id"]] = submission_counts.get(row["material_id"], 0) + 1
 
     student_count = classroom.students.count()
+    students = list(classroom.students.all().order_by("created_at", "id"))
     lesson_rows = _build_lesson_tracker_rows(request, classroom.id, modules, student_count)
+    submission_counts_by_student: dict[int, int] = {}
+    if students:
+        rows = (
+            Submission.objects.filter(student__classroom=classroom)
+            .values("student_id")
+            .annotate(total=models.Count("id"))
+        )
+        for row in rows:
+            submission_counts_by_student[int(row["student_id"])] = int(row["total"])
     notice = (request.GET.get("notice") or "").strip()
     error = (request.GET.get("error") or "").strip()
 
@@ -1167,12 +1178,120 @@ def teach_class_dashboard(request, class_id: int):
             "classroom": classroom,
             "modules": modules,
             "student_count": student_count,
+            "students": students,
             "submission_counts": submission_counts,
+            "submission_counts_by_student": submission_counts_by_student,
             "lesson_rows": lesson_rows,
             "notice": notice,
             "error": error,
         },
     )
+
+
+@staff_member_required
+def teach_class_join_card(request, class_id: int):
+    classroom = Class.objects.filter(id=class_id).first()
+    if not classroom:
+        return HttpResponse("Not found", status=404)
+
+    query = urlencode({"class_code": classroom.join_code})
+    return render(
+        request,
+        "teach_join_card.html",
+        {
+            "classroom": classroom,
+            "join_url": request.build_absolute_uri("/"),
+            "prefilled_join_url": request.build_absolute_uri(f"/?{query}"),
+        },
+    )
+
+
+@staff_member_required
+@require_POST
+def teach_rename_student(request, class_id: int):
+    classroom = Class.objects.filter(id=class_id).first()
+    if not classroom:
+        return HttpResponse("Not found", status=404)
+
+    try:
+        student_id = int((request.POST.get("student_id") or "0").strip())
+    except Exception:
+        student_id = 0
+    new_name = (request.POST.get("display_name") or "").strip()[:80]
+    if not student_id:
+        return redirect(_with_notice(f"/teach/class/{classroom.id}", error="Invalid student selection."))
+    if not new_name:
+        return redirect(_with_notice(f"/teach/class/{classroom.id}", error="Student name cannot be empty."))
+
+    student = StudentIdentity.objects.filter(id=student_id, classroom=classroom).first()
+    if student is None:
+        return redirect(_with_notice(f"/teach/class/{classroom.id}", error="Student not found in this class."))
+
+    old_name = student.display_name
+    if old_name == new_name:
+        return redirect(_with_notice(f"/teach/class/{classroom.id}", notice="No change applied to student name."))
+
+    student.display_name = new_name
+    student.save(update_fields=["display_name"])
+    _audit(
+        request,
+        action="student.rename",
+        classroom=classroom,
+        target_type="StudentIdentity",
+        target_id=str(student.id),
+        summary=f"Renamed student {old_name} -> {new_name}",
+        metadata={"old_name": old_name, "new_name": new_name},
+    )
+    return redirect(_with_notice(f"/teach/class/{classroom.id}", notice=f"Renamed student to {new_name}."))
+
+
+@staff_member_required
+@require_POST
+def teach_reset_roster(request, class_id: int):
+    classroom = Class.objects.filter(id=class_id).first()
+    if not classroom:
+        return HttpResponse("Not found", status=404)
+
+    rotate_code = (request.POST.get("rotate_code") or "1").strip() == "1"
+
+    students_qs = StudentIdentity.objects.filter(classroom=classroom)
+    student_count = students_qs.count()
+    submission_count = Submission.objects.filter(student__classroom=classroom).count()
+
+    students_qs.delete()
+
+    updated_fields = []
+    classroom.session_epoch = int(getattr(classroom, "session_epoch", 1) or 1) + 1
+    updated_fields.append("session_epoch")
+    if rotate_code:
+        join_code = gen_class_code()
+        for _ in range(10):
+            if not Class.objects.filter(join_code=join_code).exclude(id=classroom.id).exists():
+                break
+            join_code = gen_class_code()
+        classroom.join_code = join_code
+        updated_fields.append("join_code")
+    classroom.save(update_fields=updated_fields)
+
+    _audit(
+        request,
+        action="class.reset_roster",
+        classroom=classroom,
+        target_type="Class",
+        target_id=str(classroom.id),
+        summary=f"Reset roster for {classroom.name}",
+        metadata={
+            "students_deleted": student_count,
+            "submissions_deleted": submission_count,
+            "session_epoch": classroom.session_epoch,
+            "rotated_join_code": rotate_code,
+        },
+    )
+
+    notice = f"Roster reset complete. Removed {student_count} students and {submission_count} submissions."
+    if rotate_code:
+        notice += " Join code rotated."
+    return redirect(_with_notice(f"/teach/class/{classroom.id}", notice=notice))
 
 
 @staff_member_required
@@ -1488,6 +1607,9 @@ __all__ = [
     "teach_set_lesson_release",
     "teach_create_class",
     "teach_class_dashboard",
+    "teach_class_join_card",
+    "teach_rename_student",
+    "teach_reset_roster",
     "teach_toggle_lock",
     "teach_rotate_code",
     "teach_add_module",

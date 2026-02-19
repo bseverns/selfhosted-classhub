@@ -24,10 +24,10 @@ If you break a hard constraint, this is not "just a follow-up" — fix it now or
 From repo root:
 
 ```bash
-DJANGO_SECRET_KEY=dev-secret python services/classhub/manage.py check
-DJANGO_SECRET_KEY=dev-secret python services/classhub/manage.py test
-DJANGO_SECRET_KEY=dev-secret python services/homework_helper/manage.py check
-DJANGO_SECRET_KEY=dev-secret python services/homework_helper/manage.py test
+DJANGO_DEBUG=1 DJANGO_SECRET_KEY=dev-secret python services/classhub/manage.py check
+DJANGO_DEBUG=1 DJANGO_SECRET_KEY=dev-secret python services/classhub/manage.py test
+DJANGO_DEBUG=1 DJANGO_SECRET_KEY=dev-secret python services/homework_helper/manage.py check
+DJANGO_DEBUG=1 DJANGO_SECRET_KEY=dev-secret python services/homework_helper/manage.py test
 ```
 
 For stack-level confidence:
@@ -54,6 +54,7 @@ No docs update for behavior change = incomplete branch.
   - change summary
   - risk + rollback notes
   - exact validation commands + outcomes
+  - link to CI coverage artifacts (`coverage-classhub.xml`, `coverage-helper.xml`) when test-suite runs
 - Keep commit history coherent (squash fixup noise if needed).
 
 ## 6) Data/privacy sanity check

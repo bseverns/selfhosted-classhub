@@ -28,8 +28,8 @@ If you're asking "where should this code live?", default answer is:
 From repo root:
 
 ```bash
-DJANGO_SECRET_KEY=dev-secret python services/classhub/manage.py check
-DJANGO_SECRET_KEY=dev-secret python services/classhub/manage.py test
+DJANGO_DEBUG=1 DJANGO_SECRET_KEY=dev-secret python services/classhub/manage.py check
+DJANGO_DEBUG=1 DJANGO_SECRET_KEY=dev-secret python services/classhub/manage.py test
 ```
 
 If you’re running the full stack, use compose for realistic routing/storage behavior:
@@ -43,6 +43,7 @@ docker compose up -d --build
 
 - Student auth in MVP is intentionally lightweight: class code + display name.
 - Teacher/admin auth rides Django auth and should remain explicit + auditable.
+- Superuser `/admin` access is OTP-verified 2FA by default (provision via `bootstrap_admin_otp`).
 - Reliability beats cleverness. If a trick makes incident response harder, don't ship it.
 
 ## Before you open a PR touching this service

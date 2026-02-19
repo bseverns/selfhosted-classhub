@@ -10,9 +10,11 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import Client, TestCase, override_settings
+from django_otp.plugins.otp_totp.models import TOTPDevice
 from django.utils import timezone
 
 from .models import AuditEvent, Class, LessonRelease, Material, Module, StudentEvent, StudentIdentity, Submission
+from .services.upload_scan import ScanResult
 
 
 class TeacherPortalTests(TestCase):
@@ -79,6 +81,16 @@ class TeacherPortalTests(TestCase):
         self.assertContains(resp, "Recent submissions")
         self.assertContains(resp, "Ada")
         self.assertContains(resp, "Generate Course Authoring Templates")
+
+    def test_teach_class_join_card_renders_printable_details(self):
+        classroom = Class.objects.create(name="Period 2", join_code="JOIN7788")
+        self.client.force_login(self.staff)
+
+        resp = self.client.get(f"/teach/class/{classroom.id}/join-card")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Student Join Card")
+        self.assertContains(resp, "JOIN7788")
+        self.assertContains(resp, "/?class_code=JOIN7788")
 
     @patch("hub.views.teacher.generate_authoring_templates")
     def test_teach_home_can_generate_authoring_templates(self, mock_generate):
@@ -174,6 +186,85 @@ class TeacherPortalTests(TestCase):
         self.assertEqual(denied.status_code, 302)
         self.assertIn("/admin/login/", denied["Location"])
 
+    def test_teacher_can_rename_student(self):
+        classroom = Class.objects.create(name="Period Rename", join_code="REN12345")
+        student = StudentIdentity.objects.create(classroom=classroom, display_name="Ari")
+        self.client.force_login(self.staff)
+
+        resp = self.client.post(
+            f"/teach/class/{classroom.id}/rename-student",
+            {"student_id": str(student.id), "display_name": "Aria"},
+        )
+        self.assertEqual(resp.status_code, 302)
+        student.refresh_from_db()
+        self.assertEqual(student.display_name, "Aria")
+
+    def test_teacher_can_reset_roster_and_rotate_code(self):
+        classroom = Class.objects.create(name="Period Reset", join_code="RST12345")
+        module = Module.objects.create(classroom=classroom, title="Session", order_index=0)
+        upload = Material.objects.create(
+            module=module,
+            title="Upload",
+            type=Material.TYPE_UPLOAD,
+            accepted_extensions=".sb3",
+            max_upload_mb=50,
+            order_index=0,
+        )
+        student = StudentIdentity.objects.create(classroom=classroom, display_name="Mia")
+        Submission.objects.create(
+            material=upload,
+            student=student,
+            original_filename="project.sb3",
+            file=SimpleUploadedFile("project.sb3", b"dummy"),
+        )
+        old_code = classroom.join_code
+        old_epoch = classroom.session_epoch
+
+        student_client = Client()
+        session = student_client.session
+        session["student_id"] = student.id
+        session["class_id"] = classroom.id
+        session["class_epoch"] = old_epoch
+        session.save()
+
+        self.client.force_login(self.staff)
+        resp = self.client.post(
+            f"/teach/class/{classroom.id}/reset-roster",
+            {"rotate_code": "1"},
+        )
+        self.assertEqual(resp.status_code, 302)
+
+        classroom.refresh_from_db()
+        self.assertNotEqual(classroom.join_code, old_code)
+        self.assertEqual(classroom.session_epoch, old_epoch + 1)
+        self.assertEqual(StudentIdentity.objects.filter(classroom=classroom).count(), 0)
+        self.assertEqual(Submission.objects.filter(material=upload).count(), 0)
+
+        student_resp = student_client.get("/student")
+        self.assertEqual(student_resp.status_code, 302)
+        self.assertEqual(student_resp["Location"], "/")
+
+
+class Admin2FATests(TestCase):
+    def setUp(self):
+        self.superuser = get_user_model().objects.create_superuser(
+            username="admin",
+            password="pw12345",
+            email="admin@example.org",
+        )
+
+    def test_admin_requires_2fa_for_superuser(self):
+        self.client.force_login(self.superuser)
+        resp = self.client.get("/admin/", follow=False)
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/admin/login/", resp["Location"])
+
+    @override_settings(ADMIN_2FA_REQUIRED=False)
+    def test_admin_allows_superuser_when_2fa_disabled(self):
+        self.client.force_login(self.superuser)
+        resp = self.client.get("/admin/")
+        self.assertEqual(resp.status_code, 200)
+
 
 class CreateTeacherCommandTests(TestCase):
     def test_create_teacher_defaults_to_staff_non_superuser(self):
@@ -228,6 +319,29 @@ class CreateTeacherCommandTests(TestCase):
         self.assertTrue(user.check_password("newpass"))
         self.assertEqual(user.email, "")
         self.assertIn("Updated teacher", out.getvalue())
+
+
+class BootstrapAdminOTPCommandTests(TestCase):
+    def test_bootstrap_admin_otp_creates_totp_device_for_superuser(self):
+        get_user_model().objects.create_superuser(
+            username="admin",
+            password="pw12345",
+            email="admin@example.org",
+        )
+        out = StringIO()
+        call_command("bootstrap_admin_otp", username="admin", stdout=out)
+        self.assertTrue(TOTPDevice.objects.filter(user__username="admin", name="admin-primary").exists())
+        self.assertIn("Created TOTP device", out.getvalue())
+
+    def test_bootstrap_admin_otp_rejects_non_superuser(self):
+        get_user_model().objects.create_user(
+            username="teacher",
+            password="pw12345",
+            is_staff=True,
+            is_superuser=False,
+        )
+        with self.assertRaises(CommandError):
+            call_command("bootstrap_admin_otp", username="teacher")
 
 
 class LessonReleaseTests(TestCase):
@@ -318,6 +432,33 @@ class LessonReleaseTests(TestCase):
         )
         self.assertEqual(resp.status_code, 403)
         self.assertContains(resp, locked_until.isoformat(), status_code=403)
+
+    @override_settings(
+        CLASSHUB_UPLOAD_SCAN_ENABLED=True,
+        CLASSHUB_UPLOAD_SCAN_FAIL_CLOSED=True,
+    )
+    @patch("hub.views.student.scan_uploaded_file", return_value=ScanResult(status="error", message="scanner down"))
+    def test_student_upload_blocks_when_scan_fails_closed(self, _scan_mock):
+        self._login_student()
+        resp = self.client.post(
+            f"/material/{self.upload.id}/upload",
+            {"file": SimpleUploadedFile("project.sb3", b"dummy")},
+        )
+        self.assertEqual(resp.status_code, 503)
+        self.assertContains(resp, "scanner unavailable", status_code=503)
+        self.assertEqual(Submission.objects.filter(material=self.upload).count(), 0)
+
+    @override_settings(CLASSHUB_UPLOAD_SCAN_ENABLED=True)
+    @patch("hub.views.student.scan_uploaded_file", return_value=ScanResult(status="infected", message="FOUND"))
+    def test_student_upload_blocks_when_scan_detects_threat(self, _scan_mock):
+        self._login_student()
+        resp = self.client.post(
+            f"/material/{self.upload.id}/upload",
+            {"file": SimpleUploadedFile("project.sb3", b"dummy")},
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertContains(resp, "Upload blocked by malware scan", status_code=400)
+        self.assertEqual(Submission.objects.filter(material=self.upload).count(), 0)
 
 
 class JoinClassTests(TestCase):

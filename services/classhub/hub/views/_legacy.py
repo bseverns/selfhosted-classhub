@@ -35,6 +35,7 @@ from django.core.signing import BadSignature, SignatureExpired
 import yaml
 import markdown as md
 import bleach
+from common.helper_scope import issue_scope_token
 from common.request_safety import client_ip_from_request, fixed_window_allow
 
 from ..forms import SubmissionUploadForm
@@ -681,6 +682,12 @@ def student_home(request):
             "helper_topics": "Classroom overview",
             "helper_reference": "",
             "helper_allowed_topics": "",
+            "helper_scope_token": issue_scope_token(
+                context=f"Classroom summary: {classroom.name}",
+                topics=["Classroom overview"],
+                allowed_topics=[],
+                reference="",
+            ),
         },
     )
     get_token(request)
@@ -1198,6 +1205,12 @@ def course_lesson(request, course_slug: str, lesson_slug: str):
                 }
 
     helper_reference = lesson_meta.get("helper_reference") or manifest.get("helper_reference") or ""
+    helper_scope_token = issue_scope_token(
+        context=helper_context,
+        topics=helper_topics,
+        allowed_topics=helper_allowed_topics,
+        reference=helper_reference,
+    )
     helper_widget = ""
     can_use_helper = bool(
         getattr(request, "student", None) is not None
@@ -1215,6 +1228,7 @@ def course_lesson(request, course_slug: str, lesson_slug: str):
                 "helper_topics": " | ".join(helper_topics),
                 "helper_reference": helper_reference,
                 "helper_allowed_topics": " | ".join(helper_allowed_topics),
+                "helper_scope_token": helper_scope_token,
             },
         )
 

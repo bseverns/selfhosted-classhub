@@ -56,6 +56,16 @@
       .done-guide p:last-child {
         margin-bottom: 0;
       }
+      .inline-copy {
+        margin-left: 8px;
+        padding: 4px 8px;
+        border-radius: 9px;
+        font-size: 12px;
+      }
+      .copy-status {
+        margin-top: 8px;
+        min-height: 18px;
+      }
     </style>
   </head>
   <body class="glass-theme">
@@ -67,8 +77,17 @@
           <div>
             <div class="muted"><a href="/">Join page</a> · <a href="/student">Student home</a></div>
             <h1>{{ classroom.name }}</h1>
-            <div class="muted">Signed in as <strong>{{ student.display_name }}</strong> · Code <span class="pill">{{ classroom.join_code }}</span></div>
-            <div class="muted">Your return code: <strong>{{ student.return_code }}</strong> (use it if you ever need to rejoin)</div>
+            <div class="muted">
+              Signed in as <strong>{{ student.display_name }}</strong>
+              · Code <span class="pill">{{ classroom.join_code }}</span>
+              <button type="button" class="inline-copy" data-copy-value="{{ classroom.join_code }}">Copy class code</button>
+            </div>
+            <div class="muted">
+              Your return code: <strong>{{ student.return_code }}</strong>
+              <button type="button" class="inline-copy" data-copy-value="{{ student.return_code }}">Copy return code</button>
+              (use it if you ever need to rejoin)
+            </div>
+            <div id="copy-status" class="muted copy-status" role="status" aria-live="polite"></div>
           </div>
           <div>
             <a class="muted" href="/logout">Log out</a>
@@ -162,5 +181,33 @@
         {% endif %}
       </main>
     </div>
+    <script>
+      (function () {
+        const status = document.getElementById("copy-status");
+        const buttons = document.querySelectorAll("[data-copy-value]");
+        if (!status || !buttons.length) return;
+        buttons.forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const value = btn.getAttribute("data-copy-value") || "";
+            if (!value) return;
+            try {
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(value);
+              } else {
+                const input = document.createElement("input");
+                input.value = value;
+                document.body.appendChild(input);
+                input.select();
+                document.execCommand("copy");
+                document.body.removeChild(input);
+              }
+              status.textContent = "Copied to clipboard.";
+            } catch (err) {
+              status.textContent = "Copy failed. Please copy manually.";
+            }
+          });
+        });
+      })();
+    </script>
   </body>
 </html>

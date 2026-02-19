@@ -28,8 +28,8 @@ If you touch provider integrations, keep interfaces narrow and easy to swap.
 From repo root:
 
 ```bash
-DJANGO_SECRET_KEY=dev-secret python services/homework_helper/manage.py check
-DJANGO_SECRET_KEY=dev-secret python services/homework_helper/manage.py test
+DJANGO_DEBUG=1 DJANGO_SECRET_KEY=dev-secret python services/homework_helper/manage.py check
+DJANGO_DEBUG=1 DJANGO_SECRET_KEY=dev-secret python services/homework_helper/manage.py test
 ```
 
 For full-stack behavior (redis, routing, classhub integration), run Compose:
@@ -44,6 +44,7 @@ docker compose up -d --build
 - Rate limiting still works with Redis-backed cache settings.
 - Policy language still pushes explanation/learning over answer dumping.
 - Redaction changes are documented and intentionally minimal (avoid over-collection).
+- Superuser `/admin` remains OTP-verified when `DJANGO_ADMIN_2FA_REQUIRED=1`.
 - Any behavior changes are reflected in `docs/OPENAI_HELPER.md`, `docs/HELPER_POLICY.md`, or `docs/DECISIONS.md`.
 
 ## Design attitude

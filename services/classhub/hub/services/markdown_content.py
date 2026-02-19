@@ -1,7 +1,10 @@
 """Markdown/course parsing and sanitization helpers for Class Hub views."""
 
+import copy
+from functools import lru_cache
 from pathlib import Path
 import re
+from urllib.parse import urlparse
 
 import bleach
 import markdown as md
@@ -22,6 +25,30 @@ _TEACHER_SECTION_PREFIXES = (
     "extensions (fast finisher menu)",
     "notes + options",
 )
+
+
+@lru_cache(maxsize=256)
+def _load_manifest_cached(path_str: str, mtime_ns: int) -> dict:
+    manifest_path = Path(path_str)
+    return yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+
+
+@lru_cache(maxsize=512)
+def _load_lesson_cached(path_str: str, mtime_ns: int) -> tuple[dict, str]:
+    lesson_path = Path(path_str)
+    raw = lesson_path.read_text(encoding="utf-8")
+    if raw.startswith("---"):
+        parts = raw.split("---", 2)
+        if len(parts) >= 3:
+            front_matter_text = parts[1]
+            validate_front_matter(front_matter_text, lesson_path)
+            try:
+                fm = yaml.safe_load(front_matter_text) or {}
+            except yaml.scanner.ScannerError as exc:
+                raise ValueError(f"Invalid YAML in {lesson_path}: {exc}") from exc
+            body = parts[2].lstrip("\n")
+            return fm, body
+    return {}, raw
 
 
 def validate_front_matter(front_matter_text: str, source: Path) -> None:
@@ -47,7 +74,8 @@ def load_course_manifest(course_slug: str) -> dict:
     manifest_path = _COURSES_DIR / course_slug / "course.yaml"
     if not manifest_path.exists():
         return {}
-    return yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    mtime_ns = manifest_path.stat().st_mtime_ns
+    return copy.deepcopy(_load_manifest_cached(str(manifest_path), mtime_ns))
 
 
 def load_lesson_markdown(course_slug: str, lesson_slug: str) -> tuple[dict, str, dict]:
@@ -65,19 +93,9 @@ def load_lesson_markdown(course_slug: str, lesson_slug: str) -> tuple[dict, str,
     if not lesson_path.exists():
         return {}, "", match
 
-    raw = lesson_path.read_text(encoding="utf-8")
-    if raw.startswith("---"):
-        parts = raw.split("---", 2)
-        if len(parts) >= 3:
-            front_matter_text = parts[1]
-            validate_front_matter(front_matter_text, lesson_path)
-            try:
-                fm = yaml.safe_load(front_matter_text) or {}
-            except yaml.scanner.ScannerError as exc:
-                raise ValueError(f"Invalid YAML in {lesson_path}: {exc}") from exc
-            body = parts[2].lstrip("\n")
-            return fm, body, match
-    return {}, raw, match
+    mtime_ns = lesson_path.stat().st_mtime_ns
+    fm, body = _load_lesson_cached(str(lesson_path), mtime_ns)
+    return copy.deepcopy(fm), body, match
 
 
 def is_teacher_section_heading(heading_text: str) -> bool:
@@ -171,6 +189,33 @@ def teacher_panel_markdown(front_matter: dict) -> str:
 
 
 def render_markdown_to_safe_html(markdown_text: str) -> str:
+    allow_images = bool(getattr(settings, "CLASSHUB_MARKDOWN_ALLOW_IMAGES", False))
+    allowed_hosts = {
+        str(host).strip().lower()
+        for host in getattr(settings, "CLASSHUB_MARKDOWN_ALLOWED_IMAGE_HOSTS", [])
+        if str(host).strip()
+    }
+
+    def _img_src_allowed(value: str) -> bool:
+        candidate = (value or "").strip()
+        if not candidate:
+            return False
+        parsed = urlparse(candidate)
+        if parsed.scheme in {"http", "https"}:
+            host = (parsed.hostname or "").lower()
+            return host in allowed_hosts
+        if parsed.scheme or parsed.netloc:
+            return False
+        # Relative path (same-origin once rendered).
+        return True
+
+    def _img_attr_allowed(_tag: str, name: str, value: str) -> bool:
+        if name == "src":
+            return _img_src_allowed(value)
+        if name in {"alt", "title", "loading", "decoding"}:
+            return True
+        return False
+
     html = md.markdown(
         markdown_text,
         extensions=["fenced_code", "tables", "toc"],
@@ -198,13 +243,21 @@ def render_markdown_to_safe_html(markdown_text: str) -> str:
             "summary",
         }
     )
+    if allow_images:
+        allowed_tags.add("img")
 
     allowed_attrs = {
         **bleach.sanitizer.ALLOWED_ATTRIBUTES,
         "a": ["href", "title", "target", "rel"],
         "code": ["class"],
         "pre": ["class"],
+        "h1": ["id"],
+        "h2": ["id"],
+        "h3": ["id"],
+        "h4": ["id"],
     }
+    if allow_images:
+        allowed_attrs["img"] = _img_attr_allowed
 
     cleaned = bleach.clean(html, tags=list(allowed_tags), attributes=allowed_attrs, strip=True)
     return cleaned

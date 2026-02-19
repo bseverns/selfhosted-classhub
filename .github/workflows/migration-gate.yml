@@ -17,9 +17,9 @@ jobs:
         run: pip install -r services/classhub/requirements.txt
       - name: Check classhub migrations committed
         env:
-          DJANGO_DEBUG: "0"
+          DJANGO_DEBUG: "1"
           DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
-          DJANGO_SECRET_KEY: ci-only-not-used
+          DJANGO_SECRET_KEY: ci-only-not-used-but-long-enough-for-guards
         run: python services/classhub/manage.py makemigrations --check --dry-run
 
   helper:
@@ -33,7 +33,7 @@ jobs:
         run: pip install -r services/homework_helper/requirements.txt
       - name: Check helper migrations committed
         env:
-          DJANGO_DEBUG: "0"
+          DJANGO_DEBUG: "1"
           DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
-          DJANGO_SECRET_KEY: ci-only-not-used
+          DJANGO_SECRET_KEY: ci-only-not-used-but-long-enough-for-guards
         run: python services/homework_helper/manage.py makemigrations --check --dry-run

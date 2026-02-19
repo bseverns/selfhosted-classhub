@@ -22,9 +22,10 @@ bash scripts/deploy_with_smoke.sh
 ```
 
 What it enforces:
+- `.env` validation (`scripts/validate_env_secrets.sh`) for strong secrets and routing sanity
 - migration gate (`makemigrations --check --dry-run`) for both Django services
 - compose launch using only `compose/docker-compose.yml` (no implicit override behavior)
-- Caddy mount guardrail (`/etc/caddy/Caddyfile` must come from `compose/Caddyfile`)
+- Caddy mount guardrail (`/etc/caddy/Caddyfile` must come from selected `compose/Caddyfile.*` template)
 - smoke checks (`/healthz`, `/helper/healthz`, student join, helper chat, teacher login)
 
 Optional rollback hook:
@@ -54,6 +55,8 @@ Minimal check:
 ```bash
 curl http://localhost:11434/api/tags
 ```
+
+Note: Ollama is host-bound to `127.0.0.1:11434` in compose by default.
 
 If Ollama runs on the Docker host instead of Compose, set `OLLAMA_BASE_URL`
 to the host address that containers can reach.
@@ -90,11 +93,44 @@ that include `request_id`, attempts, and timing.
 bash scripts/migration_gate.sh
 ```
 
+## CI coverage artifacts
+
+GitHub Actions `test-suite` job now uploads:
+- `coverage-classhub.xml`
+- `coverage-helper.xml`
+
+## Env/secret gate only
+
+```bash
+bash scripts/validate_env_secrets.sh
+```
+
+This checks `compose/.env` for placeholder/weak secrets and domain routing mismatches before deploy.
+
 ## Smoke checks only
 
 ```bash
 bash scripts/smoke_check.sh --strict
 ```
+
+## Caddy request body limits
+
+Set in `compose/.env`:
+
+```bash
+CADDY_CLASSHUB_MAX_BODY=650MB
+CADDY_HELPER_MAX_BODY=1MB
+```
+
+Use this to cap upload/request size at the proxy before requests reach Django.
+
+## Compose health checks
+
+`classhub_web` and `helper_web` now expose container-level health checks:
+- `classhub_web`: `http://127.0.0.1:8000/healthz`
+- `helper_web`: `http://127.0.0.1:8000/helper/healthz`
+
+Caddy depends on these health checks before starting proxy routing.
 
 ## Teacher accounts
 
@@ -105,6 +141,19 @@ Canonical teacher account workflow:
 
 Command script:
 - `scripts/examples/teacher_accounts.sh` (dry-run by default; use `RUN=1` to execute)
+
+## Admin 2FA bootstrap
+
+Admin routes use OTP 2FA by default (`DJANGO_ADMIN_2FA_REQUIRED=1`).
+
+Provision a TOTP device for a superuser:
+
+```bash
+cd /srv/lms/compose
+docker compose exec classhub_web python manage.py bootstrap_admin_otp --username <admin_username> --with-static-backup
+```
+
+Use `--rotate` to replace an existing device name.
 
 ## Pre-deploy content checks
 
@@ -122,6 +171,7 @@ bash scripts/content_preflight.sh piper_scratch_12_session --strict-global
 
 - `scripts/backup_postgres.sh`
 - `scripts/backup_minio.sh`
+- `scripts/backup_uploads.sh`
 
 ## Disaster recovery
 

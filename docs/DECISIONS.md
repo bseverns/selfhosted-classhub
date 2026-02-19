@@ -14,6 +14,10 @@ Historical implementation logs and superseded decisions are archived by month in
 - [Deployment guardrails](#deployment-guardrails)
 - [Teacher authoring templates](#teacher-authoring-templates)
 - [Teacher UI comfort mode](#teacher-ui-comfort-mode)
+- [Helper scope signing](#helper-scope-signing)
+- [Production transport hardening](#production-transport-hardening)
+- [Content parse caching](#content-parse-caching)
+- [Admin access 2FA](#admin-access-2fa)
 
 ## Archive Index
 
@@ -31,6 +35,17 @@ Historical implementation logs and superseded decisions are archived by month in
 **Why this remains active:**
 - Keeps student friction low while limiting impersonation risk.
 - Maintains minimal student PII collection in MVP.
+
+## Admin access 2FA
+
+**Current decision:**
+- Django admin uses OTP-verified superuser sessions by default in both services.
+- `DJANGO_ADMIN_2FA_REQUIRED=1` is the expected production posture.
+- OTP enrollment is provisioned operationally via `bootstrap_admin_otp` command.
+
+**Why this remains active:**
+- Reduces risk from password reuse/phishing against admin accounts.
+- Preserves clear separation: teacher workflow in `/teach`, hardened ops workflow in `/admin`.
 
 ## Service boundary: Homework Helper separate service
 
@@ -137,3 +152,43 @@ Historical implementation logs and superseded decisions are archived by month in
 **Why this remains active:**
 - Reduces visual fatigue during long grading/planning sessions.
 - Improves scanability of dense teacher workflows without a full redesign.
+
+## Helper scope signing
+
+**Current decision:**
+- Class Hub now signs helper scope metadata (context/topics/allowed-topics/reference) and sends it as `scope_token`.
+- Homework Helper verifies `scope_token` server-side and ignores tamperable client scope fields when a token is present.
+- Student helper requests require a valid scope token; staff requests can still use legacy/manual scope payloads for operational debugging.
+
+**Why this remains active:**
+- Prevents students from broadening helper scope by editing browser requests.
+- Preserves lesson-scoped helper behavior without coupling helper directly to classhub content mounts.
+
+## Production transport hardening
+
+**Current decision:**
+- Internal services remain private by default (Postgres/Redis internal network only; Ollama/MinIO host bindings are localhost-only).
+- Caddy explicitly sets forwarded IP/proto headers before proxying to Django.
+- Caddy enforces request-body limits per upstream (`CADDY_CLASSHUB_MAX_BODY`, `CADDY_HELPER_MAX_BODY`).
+- Both Django services reject weak/default secret keys when `DJANGO_DEBUG=0`.
+- Deploy flow includes automated `.env` validation via `scripts/validate_env_secrets.sh`.
+- Security headers and HTTPS controls are enabled in production through explicit env knobs (`DJANGO_SECURE_*`).
+- UI templates use local/system font stacks only (no Google Fonts network calls).
+
+**Why this remains active:**
+- Reduces accidental public exposure of internal services.
+- Improves trust in proxy-aware rate limiting and secure-cookie behavior.
+- Drops oversized requests at the edge before they reach Django workers.
+- Prevents unsafe production boots with placeholder secrets.
+- Removes third-party font calls from student/teacher/admin page loads.
+
+## Content parse caching
+
+**Current decision:**
+- Course manifests and lesson markdown parsing are cached in-process using `(path, mtime)` keys.
+- Cache entries invalidate automatically when file modification times change.
+- Returned manifest/front-matter payloads are deep-copied on read to prevent accidental mutation leaks.
+
+**Why this remains active:**
+- Reduces repeated disk + YAML/markdown parsing overhead on hot lesson/class pages.
+- Keeps behavior deterministic for live content edits without requiring manual cache flushes.

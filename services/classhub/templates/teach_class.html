@@ -129,6 +129,65 @@
         border-radius: 12px;
         padding: 10px;
       }
+      .inline-copy {
+        margin-left: 8px;
+        padding: 4px 8px;
+        border-radius: 9px;
+        font-size: 12px;
+      }
+      .copy-status {
+        margin-top: 8px;
+        min-height: 18px;
+      }
+      .roster-table-wrap {
+        margin-top: 12px;
+        border: 1px solid rgba(22, 59, 80, 0.16);
+        border-radius: 14px;
+        overflow: auto;
+        background: rgba(255, 255, 255, 0.42);
+      }
+      .roster-table-wrap table {
+        margin: 0;
+        min-width: 760px;
+      }
+      .roster-table-wrap thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: rgba(237, 246, 251, 0.96);
+        backdrop-filter: blur(5px);
+      }
+      .roster-table-wrap tbody td {
+        border-bottom-color: rgba(22, 59, 80, 0.12);
+      }
+      .roster-table-wrap tbody tr:last-child td {
+        border-bottom: 0;
+      }
+      .rename-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .rename-row input {
+        min-width: 180px;
+      }
+      .danger-zone {
+        margin-top: 14px;
+        border: 1px solid rgba(182, 56, 56, 0.35);
+        border-radius: 12px;
+        background: rgba(255, 240, 240, 0.55);
+        padding: 12px;
+      }
+      .danger-zone button {
+        background: linear-gradient(155deg, #7d2020, #631717);
+      }
+      .danger-zone form {
+        margin-top: 10px;
+      }
+      .danger-zone label {
+        text-transform: none;
+        letter-spacing: normal;
+      }
     </style>
   </head>
   <body class="glass-theme teacher-comfort">
@@ -145,9 +204,12 @@
             <h1>{{ classroom.name }}</h1>
             <div class="muted">
               Join code <span class="pill">{{ classroom.join_code }}</span>
+              <button type="button" class="inline-copy" data-copy-value="{{ classroom.join_code }}">Copy</button>
+              · <a href="/teach/class/{{ classroom.id }}/join-card" target="_blank" rel="noopener">Printable join card</a>
               · Students {{ student_count }}
               · Status {% if classroom.is_locked %}<span class="state-pill state-pill--locked">Locked</span>{% else %}<span class="state-pill state-pill--open">Open</span>{% endif %}
             </div>
+            <div id="copy-status" class="muted copy-status" role="status" aria-live="polite"></div>
           </div>
           <div class="btnline">
             <form method="post" action="/teach/class/{{ classroom.id }}/toggle-lock">
@@ -169,6 +231,65 @@
             <p class="error" style="margin:0 0 12px 0;">{{ error }}</p>
           {% endif %}
 
+          <div class="row">
+            <h2 style="margin:0">Roster</h2>
+            <div class="muted">Rename students quickly. Reset roster between drop-in cohorts.</div>
+          </div>
+
+          {% if students %}
+            <div class="roster-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Student</th>
+                    <th scope="col">Return code</th>
+                    <th scope="col">Submissions</th>
+                    <th scope="col"><span class="visually-hidden">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for st in students %}
+                    <tr>
+                      <td><strong>{{ st.display_name }}</strong></td>
+                      <td>
+                        <span class="pill">{{ st.return_code }}</span>
+                        <button type="button" class="inline-copy" data-copy-value="{{ st.return_code }}">Copy</button>
+                      </td>
+                      <td class="muted mini">{{ submission_counts_by_student|get_item:st.id|default:0 }}</td>
+                      <td>
+                        <form method="post" action="/teach/class/{{ classroom.id }}/rename-student" class="rename-row">
+                          {% csrf_token %}
+                          <input type="hidden" name="student_id" value="{{ st.id }}" />
+                          <input name="display_name" value="{{ st.display_name }}" maxlength="80" />
+                          <button type="submit">Rename</button>
+                        </form>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p class="muted" style="margin-top:12px">No students in roster yet.</p>
+          {% endif %}
+
+          <div class="danger-zone">
+            <strong>Reset roster</strong>
+            <p class="muted mini" style="margin:6px 0 0 0;">
+              This removes all students in this class and deletes their submissions. Active student sessions are invalidated immediately.
+            </p>
+            <form method="post" action="/teach/class/{{ classroom.id }}/reset-roster" onsubmit="return confirm('Reset roster for this class? This deletes students and submissions.');">
+              {% csrf_token %}
+              <label style="display:flex; align-items:center; gap:8px; margin-top:0;">
+                <input type="checkbox" name="rotate_code" value="1" checked style="width:auto; margin:0;" />
+                Rotate class join code after reset
+              </label>
+              <button type="submit">Reset roster now</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="card">
           <div class="row">
             <h2 style="margin:0">Lesson Tracker</h2>
             <div class="muted">Course/lesson links with submission coverage</div>
@@ -363,5 +484,33 @@
         </div>
       </main>
     </div>
+    <script>
+      (function () {
+        const status = document.getElementById("copy-status");
+        const buttons = document.querySelectorAll("[data-copy-value]");
+        if (!status || !buttons.length) return;
+        buttons.forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const value = btn.getAttribute("data-copy-value") || "";
+            if (!value) return;
+            try {
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(value);
+              } else {
+                const input = document.createElement("input");
+                input.value = value;
+                document.body.appendChild(input);
+                input.select();
+                document.execCommand("copy");
+                document.body.removeChild(input);
+              }
+              status.textContent = "Copied to clipboard.";
+            } catch (err) {
+              status.textContent = "Copy failed. Please copy manually.";
+            }
+          });
+        });
+      })();
+    </script>
   </body>
 </html>

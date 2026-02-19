@@ -4,6 +4,7 @@
   data-helper-topics="{{ helper_topics|default:'' }}"
   data-helper-reference="{{ helper_reference|default:'' }}"
   data-helper-allowed-topics="{{ helper_allowed_topics|default:'' }}"
+  data-helper-scope-token="{{ helper_scope_token|default:'' }}"
 >
   <h2 style="margin:0; font-size:1.25rem;">{{ helper_title|default:"Homework Helper" }}</h2>
   <p class="helper-description">{{ helper_description|default:"Ask the helper for hints, steps, or feedback." }}</p>
@@ -115,6 +116,7 @@
     const topicsData = widget.dataset.helperTopics;
     const referenceKey = widget.dataset.helperReference;
     const allowedTopicsData = widget.dataset.helperAllowedTopics;
+    const scopeToken = (widget.dataset.helperScopeToken || "").trim();
     const topics = topicsData
       ? topicsData.split("|").map((topic) => topic.trim()).filter(Boolean)
       : [];
@@ -137,17 +139,22 @@
       setOutput("Thinking…");
       try {
         const payload = { message };
-        if (context) {
-          payload.context = context;
-        }
-        if (topics.length) {
-          payload.topics = topics;
-        }
-        if (referenceKey) {
-          payload.reference = referenceKey;
-        }
-        if (allowedTopics.length) {
-          payload.allowed_topics = allowedTopics;
+        if (scopeToken) {
+          payload.scope_token = scopeToken;
+        } else {
+          // Backward-compatible fallback for contexts that do not yet render a scope token.
+          if (context) {
+            payload.context = context;
+          }
+          if (topics.length) {
+            payload.topics = topics;
+          }
+          if (referenceKey) {
+            payload.reference = referenceKey;
+          }
+          if (allowedTopics.length) {
+            payload.allowed_topics = allowedTopics;
+          }
         }
         const res = await fetch("/helper/chat", {
           method: "POST",

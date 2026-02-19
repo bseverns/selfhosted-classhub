@@ -12,6 +12,14 @@ See `scripts/bootstrap_day1.sh` for an automated starter.
 
 ## Run
 - Copy `compose/.env.example` → `compose/.env`
+- Set a strong `DJANGO_SECRET_KEY` (do not keep placeholder/default values)
+- Keep admin 2FA enforcement enabled: `DJANGO_ADMIN_2FA_REQUIRED=1`
+- For domain/TLS mode, set:
+  - `DJANGO_SECURE_SSL_REDIRECT=1`
+  - `DJANGO_SECURE_HSTS_SECONDS=31536000` (after initial validation)
+- Confirm proxy body limits for your workload:
+  - `CADDY_CLASSHUB_MAX_BODY` (uploads; default `650MB`)
+  - `CADDY_HELPER_MAX_BODY` (helper API; default `1MB`)
 - Configure LLM backend (default is Ollama; ensure it is running)
 - Configure smoke-check credentials in `compose/.env`:
   - `SMOKE_BASE_URL`
@@ -20,6 +28,8 @@ See `scripts/bootstrap_day1.sh` for an automated starter.
   - `SMOKE_TEACHER_PASSWORD`
 - Run content preflight checks (blocks bad lesson video/copy sync):
   - `bash scripts/content_preflight.sh piper_scratch_12_session`
+- Validate deploy secrets and routing env:
+  - `bash scripts/validate_env_secrets.sh`
 - Run migration gate:
   - `bash scripts/migration_gate.sh`
 - Run deterministic production deploy + smoke:
@@ -92,3 +102,7 @@ curl -I https://$DOMAIN/
 ```
 
 Expected behavior: HTTPS endpoints return `200`; HTTP redirects to HTTPS (`301`/`308`).
+
+Service exposure defaults:
+- Postgres/Redis are internal-only on Docker networking.
+- Ollama (`11434`) and MinIO console (`9001`) bind to `127.0.0.1` on host.

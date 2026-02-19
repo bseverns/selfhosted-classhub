@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Printable Join Card · {{ classroom.name }}</title>
+    {% include "includes/glass_theme.html" %}
+    <style>
+      .shell {
+        max-width: 820px;
+      }
+      .card h1 {
+        margin: 0;
+        font-size: clamp(2rem, 3.8vw, 2.8rem);
+      }
+      .join-code {
+        display: inline-block;
+        margin-top: 10px;
+        padding: 10px 18px;
+        border-radius: 14px;
+        font-size: clamp(2rem, 5vw, 3.1rem);
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        border: 2px solid rgba(17, 54, 76, 0.35);
+        background: rgba(255, 255, 255, 0.78);
+      }
+      .instruction-list {
+        margin-top: 12px;
+      }
+      .instruction-list li {
+        margin-bottom: 8px;
+      }
+      .action-row {
+        margin-top: 14px;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .copy-status {
+        margin-top: 8px;
+        min-height: 18px;
+      }
+      @media print {
+        .skip-link,
+        .action-row,
+        .navline {
+          display: none !important;
+        }
+        body.glass-theme {
+          padding: 0;
+          background: #fff;
+        }
+        .card {
+          border: 2px solid #d2dbe2;
+          box-shadow: none;
+          background: #fff;
+          break-inside: avoid;
+        }
+      }
+    </style>
+  </head>
+  <body class="glass-theme teacher-comfort">
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+    <div class="shell">
+      <main id="main-content">
+        <div class="card">
+          <div class="muted navline"><a href="/teach/class/{{ classroom.id }}">Back to class dashboard</a></div>
+          <h1>{{ classroom.name }}</h1>
+          <p class="muted">Student Join Card</p>
+          <div class="join-code">{{ classroom.join_code }}</div>
+          <div class="action-row">
+            <button type="button" data-copy-value="{{ classroom.join_code }}">Copy code</button>
+            <button type="button" onclick="window.print()">Print this page</button>
+          </div>
+          <div class="muted copy-status" id="copy-status" role="status" aria-live="polite"></div>
+
+          <ol class="instruction-list">
+            <li>Open <strong>{{ join_url }}</strong></li>
+            <li>Enter class code <strong>{{ classroom.join_code }}</strong></li>
+            <li>Enter your display name your teacher will recognize</li>
+            <li>Keep your return code shown after join for future re-entry</li>
+          </ol>
+
+          <p class="muted">
+            Prefilled link:
+            <a href="{{ prefilled_join_url }}">{{ prefilled_join_url }}</a>
+          </p>
+        </div>
+      </main>
+    </div>
+    <script>
+      (function () {
+        const btn = document.querySelector("[data-copy-value]");
+        const status = document.getElementById("copy-status");
+        if (!btn || !status) return;
+        btn.addEventListener("click", async () => {
+          const text = btn.getAttribute("data-copy-value") || "";
+          if (!text) return;
+          try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              await navigator.clipboard.writeText(text);
+            } else {
+              const input = document.createElement("input");
+              input.value = text;
+              document.body.appendChild(input);
+              input.select();
+              document.execCommand("copy");
+              document.body.removeChild(input);
+            }
+            status.textContent = "Copied class code.";
+          } catch (err) {
+            status.textContent = "Copy failed. Highlight and copy the code manually.";
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

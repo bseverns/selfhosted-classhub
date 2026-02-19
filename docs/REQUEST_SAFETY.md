@@ -49,3 +49,10 @@ Homework Helper:
 
 Keep service limits separate, but keep parsing + limiter mechanics centralized
 in `common.request_safety`.
+
+## Proxy note
+
+The compose Caddy configs set `X-Forwarded-For`, `X-Real-IP`, and
+`X-Forwarded-Proto` from the immediate connection values before proxying to
+Django. This keeps rate-limit IP parsing deterministic when
+`REQUEST_SAFETY_TRUST_PROXY_HEADERS=1`.

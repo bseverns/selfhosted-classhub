@@ -11,6 +11,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.cache import cache
+from django.core.signing import BadSignature, SignatureExpired
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET, require_POST
 from common.request_safety import (
@@ -18,6 +19,7 @@ from common.request_safety import (
     client_ip_from_request,
     fixed_window_allow,
 )
+from common.helper_scope import parse_scope_token
 
 from django.db import connection
 from django.db.utils import OperationalError, ProgrammingError
@@ -130,55 +132,6 @@ def _reset_backend_failure_state(backend: str) -> None:
     cache.delete(_backend_circuit_key(backend))
 
 
-def _env_int(name: str, default: int) -> int:
-    raw = os.getenv(name, "").strip()
-    if not raw:
-        return default
-    try:
-        return int(raw)
-    except Exception:
-        return default
-
-
-def _env_float(name: str, default: float) -> float:
-    raw = os.getenv(name, "").strip()
-    if not raw:
-        return default
-    try:
-        return float(raw)
-    except Exception:
-        return default
-
-
-def _request_id(request) -> str:
-    header_value = (request.META.get("HTTP_X_REQUEST_ID", "") or "").strip()
-    if header_value:
-        return header_value[:80]
-    return uuid.uuid4().hex
-
-
-def _json_response(payload: dict, *, request_id: str, status: int = 200) -> JsonResponse:
-    body = dict(payload or {})
-    body.setdefault("request_id", request_id)
-    resp = JsonResponse(body, status=status)
-    resp["X-Request-ID"] = request_id
-    return resp
-
-
-def _log_chat_event(level: str, event: str, *, request_id: str, **fields):
-    row = {"event": event, "request_id": request_id, **fields}
-    line = json.dumps(row, sort_keys=True, default=str)
-    if level == "warning":
-        logger.warning(line)
-    elif level == "error":
-        logger.error(line)
-    else:
-        logger.info(line)
-
-
-def _backend_circuit_key(backend: str) -> str:
-    return f"helper:circuit_open:{backend}"
-
 def _student_session_exists(student_id: int, class_id: int) -> bool:
     """Validate student session against shared Class Hub table when available."""
     try:
@@ -195,23 +148,34 @@ def _student_session_exists(student_id: int, class_id: int) -> bool:
 
 
 def _actor_key(request) -> str:
-    user = getattr(request, "user", None)
-    if user and user.is_authenticated and user.is_staff:
-        return f"staff:{user.id}"
-
-    student_id = request.session.get("student_id")
-    class_id = request.session.get("class_id")
-    if not (student_id and class_id):
+    key = build_staff_or_student_actor_key(request)
+    if not key:
         return ""
+    if key.startswith("student:"):
+        student_id = request.session.get("student_id")
+        class_id = request.session.get("class_id")
+        if not (student_id and class_id):
+            return ""
+        if not _student_session_exists(student_id, class_id):
+            return ""
+    return key
 
-    if not _student_session_exists(student_id, class_id):
-        return ""
 
-    return f"student:{class_id}:{student_id}"
+def _load_scope_from_token(scope_token: str, *, max_age_seconds: int) -> dict:
+    return parse_scope_token(scope_token, max_age_seconds=max_age_seconds)
+
+
 def _ollama_chat(base_url: str, model: str, instructions: str, message: str) -> tuple[str, str]:
     url = base_url.rstrip("/") + "/api/chat"
     temperature = float(os.getenv("OLLAMA_TEMPERATURE", "0.2"))
     top_p = float(os.getenv("OLLAMA_TOP_P", "0.9"))
+    num_predict = _env_int("OLLAMA_NUM_PREDICT", 0)
+    options = {
+        "temperature": temperature,
+        "top_p": top_p,
+    }
+    if num_predict > 0:
+        options["num_predict"] = num_predict
     payload = {
         "model": model,
         "messages": [
@@ -219,10 +183,7 @@ def _ollama_chat(base_url: str, model: str, instructions: str, message: str) -> 
             {"role": "user", "content": message},
         ],
         "stream": False,
-        "options": {
-            "temperature": temperature,
-            "top_p": top_p,
-        },
+        "options": options,
     }
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
@@ -246,12 +207,25 @@ def _openai_chat(model: str, instructions: str, message: str) -> tuple[str, str]
         raise RuntimeError("openai_not_installed") from exc
 
     client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-    response = client.responses.create(
-        model=model,
-        instructions=instructions,
-        input=message,
-    )
+    create_kwargs = {
+        "model": model,
+        "instructions": instructions,
+        "input": message,
+    }
+    max_output_tokens = _env_int("OPENAI_MAX_OUTPUT_TOKENS", 0)
+    if max_output_tokens > 0:
+        create_kwargs["max_output_tokens"] = max_output_tokens
+    response = client.responses.create(**create_kwargs)
     return (getattr(response, "output_text", "") or ""), model
+
+
+def _truncate_response_text(text: str) -> tuple[str, bool]:
+    max_chars = _env_int("HELPER_RESPONSE_MAX_CHARS", 2200)
+    if max_chars < 200:
+        max_chars = 200
+    if len(text) <= max_chars:
+        return text, False
+    return text[:max_chars].rstrip(), True
 
 
 def _is_retryable_backend_error(exc: Exception) -> bool:
@@ -452,10 +426,46 @@ def chat(request):
         _log_chat_event("warning", "bad_json", request_id=request_id, actor_type=actor_type, ip=client_ip)
         return _json_response({"error": "bad_json"}, status=400, request_id=request_id)
 
-    context_value = payload.get("context")
-    topics_value = payload.get("topics")
-    allowed_topics_value = payload.get("allowed_topics")
-    reference_key = payload.get("reference")
+    scope_token = str(payload.get("scope_token") or "").strip()
+    context_value = ""
+    topics: list[str] = []
+    allowed_topics: list[str] = []
+    reference_key = ""
+    scope_verified = False
+
+    if scope_token:
+        try:
+            scope = _load_scope_from_token(
+                scope_token,
+                max_age_seconds=max(_env_int("HELPER_SCOPE_TOKEN_MAX_AGE_SECONDS", 7200), 60),
+            )
+            context_value = scope.get("context", "")
+            topics = scope.get("topics", [])
+            allowed_topics = scope.get("allowed_topics", [])
+            reference_key = scope.get("reference", "")
+            scope_verified = True
+        except SignatureExpired:
+            _log_chat_event("warning", "scope_token_expired", request_id=request_id, actor_type=actor_type, ip=client_ip)
+            return _json_response({"error": "invalid_scope_token"}, status=400, request_id=request_id)
+        except (BadSignature, ValueError):
+            _log_chat_event("warning", "scope_token_invalid", request_id=request_id, actor_type=actor_type, ip=client_ip)
+            return _json_response({"error": "invalid_scope_token"}, status=400, request_id=request_id)
+    else:
+        # Staff can still use legacy/manual payloads for operational debugging.
+        # Students must send a signed scope token from Class Hub pages.
+        if actor_type == "student":
+            _log_chat_event("warning", "scope_token_missing", request_id=request_id, actor_type=actor_type, ip=client_ip)
+            return _json_response({"error": "missing_scope_token"}, status=400, request_id=request_id)
+
+        context_value = str(payload.get("context") or "").strip()
+        topics_value = payload.get("topics")
+        if isinstance(topics_value, str):
+            topics = [t.strip() for t in topics_value.split("|") if t.strip()]
+        elif isinstance(topics_value, list):
+            topics = [str(t).strip() for t in topics_value if str(t).strip()]
+        allowed_topics = _normalize_allowed_topics(payload.get("allowed_topics"))
+        reference_key = str(payload.get("reference") or "").strip()
+
     message = (payload.get("message") or "").strip()
     if not message:
         return _json_response({"error": "missing_message"}, status=400, request_id=request_id)
@@ -466,12 +476,6 @@ def chat(request):
     backend = (os.getenv("HELPER_LLM_BACKEND", "ollama") or "ollama").lower()
     strictness = (os.getenv("HELPER_STRICTNESS", "light") or "light").lower()
     scope_mode = (os.getenv("HELPER_SCOPE_MODE", "soft") or "soft").lower()
-    topics: list[str] = []
-    if isinstance(topics_value, str):
-        topics = [t.strip() for t in topics_value.split("|") if t.strip()]
-    elif isinstance(topics_value, list):
-        topics = [str(t).strip() for t in topics_value if str(t).strip()]
-    allowed_topics = _normalize_allowed_topics(allowed_topics_value)
     reference_dir = os.getenv("HELPER_REFERENCE_DIR", "/app/tutor/reference").strip()
     reference_map_raw = os.getenv("HELPER_REFERENCE_MAP", "").strip()
     reference_file = os.getenv("HELPER_REFERENCE_FILE", "").strip()
@@ -494,6 +498,7 @@ def chat(request):
                 "backend": backend,
                 "strictness": strictness,
                 "attempts": 0,
+                "scope_verified": scope_verified,
             },
             request_id=request_id,
         )
@@ -512,6 +517,7 @@ def chat(request):
                     "backend": backend,
                     "strictness": strictness,
                     "attempts": 0,
+                    "scope_verified": scope_verified,
                 },
                 request_id=request_id,
             )
@@ -583,6 +589,8 @@ def chat(request):
     finally:
         release_slot(slot_key, token)
 
+    safe_text, truncated = _truncate_response_text(text or "")
+
     _reset_backend_failure_state(backend)
     total_ms = int((time.monotonic() - started_at) * 1000)
     _log_chat_event(
@@ -593,17 +601,21 @@ def chat(request):
         backend=backend,
         attempts=attempts_used,
         queue_wait_ms=queue_wait_ms,
+        response_chars=len(safe_text),
+        truncated=truncated,
         total_ms=total_ms,
     )
     return _json_response(
         {
-            "text": text or "",
+            "text": safe_text,
             "model": model_used,
             "backend": backend,
             "strictness": strictness,
             "attempts": attempts_used,
             "queue_wait_ms": queue_wait_ms,
             "total_ms": total_ms,
+            "truncated": truncated,
+            "scope_verified": scope_verified,
         },
         request_id=request_id,
     )

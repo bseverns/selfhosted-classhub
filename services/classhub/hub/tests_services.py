@@ -1,6 +1,8 @@
 from types import SimpleNamespace
+from unittest.mock import patch
 
-from django.test import SimpleTestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import SimpleTestCase, override_settings
 
 from .services.markdown_content import (
     render_markdown_to_safe_html,
@@ -20,6 +22,7 @@ from .services.upload_policy import (
     front_matter_submission,
     parse_extensions,
 )
+from .services.upload_scan import scan_uploaded_file
 
 
 class UploadPolicyServiceTests(SimpleTestCase):
@@ -72,6 +75,76 @@ class MarkdownContentServiceTests(SimpleTestCase):
         html = render_markdown_to_safe_html("Hi<script>alert(1)</script>")
         self.assertIn("Hi", html)
         self.assertNotIn("<script", html)
+
+    def test_render_markdown_to_safe_html_keeps_heading_anchor_ids(self):
+        html = render_markdown_to_safe_html("# Intro Heading")
+        self.assertIn('id="intro-heading"', html)
+
+    def test_render_markdown_to_safe_html_blocks_images_by_default(self):
+        html = render_markdown_to_safe_html('![diagram](https://cdn.example.org/d.png)')
+        self.assertNotIn("<img", html)
+
+    @override_settings(
+        CLASSHUB_MARKDOWN_ALLOW_IMAGES=True,
+        CLASSHUB_MARKDOWN_ALLOWED_IMAGE_HOSTS=["cdn.example.org"],
+    )
+    def test_render_markdown_allows_images_for_allowed_host(self):
+        html = render_markdown_to_safe_html('![diagram](https://cdn.example.org/d.png)')
+        self.assertIn("<img", html)
+        self.assertIn('src="https://cdn.example.org/d.png"', html)
+
+    @override_settings(
+        CLASSHUB_MARKDOWN_ALLOW_IMAGES=True,
+        CLASSHUB_MARKDOWN_ALLOWED_IMAGE_HOSTS=["cdn.example.org"],
+    )
+    def test_render_markdown_blocks_images_for_disallowed_host(self):
+        html = render_markdown_to_safe_html('![diagram](https://evil.example.org/d.png)')
+        self.assertNotIn("<img", html)
+
+    @override_settings(
+        CLASSHUB_MARKDOWN_ALLOW_IMAGES=True,
+        CLASSHUB_MARKDOWN_ALLOWED_IMAGE_HOSTS=[],
+    )
+    def test_render_markdown_allows_relative_images_when_enabled(self):
+        html = render_markdown_to_safe_html("![diagram](/lesson-asset/12/download)")
+        self.assertIn("<img", html)
+        self.assertIn('src="/lesson-asset/12/download"', html)
+
+
+class UploadScanServiceTests(SimpleTestCase):
+    @override_settings(CLASSHUB_UPLOAD_SCAN_ENABLED=False)
+    def test_scan_disabled_returns_disabled(self):
+        upload = SimpleUploadedFile("project.sb3", b"abc123")
+        result = scan_uploaded_file(upload)
+        self.assertEqual(result.status, "disabled")
+
+    @override_settings(
+        CLASSHUB_UPLOAD_SCAN_ENABLED=True,
+        CLASSHUB_UPLOAD_SCAN_COMMAND="scanner-cli --check",
+        CLASSHUB_UPLOAD_SCAN_TIMEOUT_SECONDS=5,
+    )
+    def test_scan_marks_clean_on_returncode_zero(self):
+        upload = SimpleUploadedFile("project.sb3", b"abc123")
+        with patch("hub.services.upload_scan.subprocess.run") as run_mock:
+            run_mock.return_value.returncode = 0
+            run_mock.return_value.stdout = ""
+            run_mock.return_value.stderr = ""
+            result = scan_uploaded_file(upload)
+        self.assertEqual(result.status, "clean")
+
+    @override_settings(
+        CLASSHUB_UPLOAD_SCAN_ENABLED=True,
+        CLASSHUB_UPLOAD_SCAN_COMMAND="scanner-cli --check",
+        CLASSHUB_UPLOAD_SCAN_TIMEOUT_SECONDS=5,
+    )
+    def test_scan_marks_infected_on_returncode_one(self):
+        upload = SimpleUploadedFile("project.sb3", b"abc123")
+        with patch("hub.services.upload_scan.subprocess.run") as run_mock:
+            run_mock.return_value.returncode = 1
+            run_mock.return_value.stdout = "FOUND TEST VIRUS"
+            run_mock.return_value.stderr = ""
+            result = scan_uploaded_file(upload)
+        self.assertEqual(result.status, "infected")
 
 
 class ContentLinksServiceTests(SimpleTestCase):

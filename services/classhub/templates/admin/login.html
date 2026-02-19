@@ -5,8 +5,6 @@
 {% block extrastyle %}
 {{ block.super }}
 <style>
-  @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700&display=swap");
-
   :root {
     --ink: #143244;
     --muted: #4f6f80;
@@ -23,7 +21,7 @@
       radial-gradient(820px 460px at 108% -5%, rgba(132, 205, 224, 0.46) 0%, rgba(132, 205, 224, 0) 58%),
       linear-gradient(145deg, #dceaf5 0%, #e6f2ec 46%, #edf3fb 100%);
     color: var(--ink);
-    font-family: "Manrope", "Avenir Next", "Segoe UI", sans-serif;
+    font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   }
 
   #header {
@@ -42,7 +40,7 @@
   #branding h1,
   #site-name a {
     color: #0f2f42;
-    font-family: "Sora", "Manrope", sans-serif;
+    font-family: "Trebuchet MS", "Avenir Next", "Segoe UI", sans-serif;
     font-weight: 700;
     letter-spacing: -0.02em;
   }
@@ -89,7 +87,7 @@
 
   .login-card h2 {
     margin: 0 0 10px 0;
-    font-family: "Sora", "Manrope", sans-serif;
+    font-family: "Trebuchet MS", "Avenir Next", "Segoe UI", sans-serif;
     font-size: 1.25rem;
     color: #113247;
   }
@@ -113,7 +111,10 @@
   }
 
   #login-form input[type="text"],
-  #login-form input[type="password"] {
+  #login-form input[type="password"],
+  #login-form input[type="tel"],
+  #login-form input[type="number"],
+  #login-form select {
     width: 100%;
     border-radius: 12px;
     border: 1px solid var(--line);
@@ -121,11 +122,14 @@
     color: var(--ink);
     padding: 10px 12px;
     font-size: 15px;
-    font-family: "Manrope", "Avenir Next", "Segoe UI", sans-serif;
+    font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   }
 
   #login-form input[type="text"]:focus,
-  #login-form input[type="password"]:focus {
+  #login-form input[type="password"]:focus,
+  #login-form input[type="tel"]:focus,
+  #login-form input[type="number"]:focus,
+  #login-form select:focus {
     outline: none;
     border-color: #0f7c8b;
     box-shadow: 0 0 0 3px rgba(15, 124, 139, 0.16);
@@ -173,6 +177,9 @@
   a:focus-visible,
   #login-form input[type="text"]:focus-visible,
   #login-form input[type="password"]:focus-visible,
+  #login-form input[type="tel"]:focus-visible,
+  #login-form input[type="number"]:focus-visible,
+  #login-form select:focus-visible,
   .submit-row input[type="submit"]:focus-visible {
     outline: 3px solid #0a6379;
     outline-offset: 2px;
@@ -198,7 +205,7 @@
   <div class="login-shell">
     <section class="login-card">
       <h2>createMPLS Course Admin Login</h2>
-      <p class="help-text">Sign in with your Django staff/admin credentials.</p>
+      <p class="help-text">Sign in with your superuser credentials and 2FA token.</p>
 
       {% if form.errors and not form.non_field_errors %}
         <p class="errornote" role="alert" aria-live="assertive">
@@ -214,13 +221,23 @@
 
       <form action="{{ app_path }}" method="post" id="login-form" autocomplete="off">
         {% csrf_token %}
-        <div class="form-row">
-          {{ form.username.label_tag }} {{ form.username }}
-        </div>
-        <div class="form-row">
-          {{ form.password.label_tag }} {{ form.password }}
-          <input type="hidden" name="next" value="{{ next }}">
-        </div>
+        {% for hidden in form.hidden_fields %}
+          {{ hidden }}
+        {% endfor %}
+        {% for field in form.visible_fields %}
+          <div class="form-row">
+            {{ field.label_tag }} {{ field }}
+            {% if field.errors %}
+              {% for error in field.errors %}
+                <p class="errornote" role="alert" aria-live="assertive" style="margin:8px 0 0 0;">{{ error }}</p>
+              {% endfor %}
+            {% endif %}
+            {% if field.help_text %}
+              <p class="help-text" style="margin:8px 0 0 0;">{{ field.help_text|safe }}</p>
+            {% endif %}
+          </div>
+        {% endfor %}
+        <input type="hidden" name="next" value="{{ next }}">
         {% url 'admin_password_reset' as password_reset_url %}
         {% if password_reset_url %}
           <div class="password-reset-link">
@@ -249,6 +266,11 @@
     }
     if (password) {
       password.setAttribute("autocomplete", "new-password");
+    }
+    var otpToken = form.querySelector('input[name="otp_token"]');
+    if (otpToken) {
+      otpToken.setAttribute("autocomplete", "one-time-code");
+      otpToken.setAttribute("inputmode", "numeric");
     }
   })();
 </script>

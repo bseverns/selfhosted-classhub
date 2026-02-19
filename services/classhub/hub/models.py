@@ -43,6 +43,8 @@ class Class(models.Model):
     name = models.CharField(max_length=200)
     join_code = models.CharField(max_length=16, unique=True, default=gen_class_code)
     is_locked = models.BooleanField(default=False)
+    # Increment to invalidate active student sessions without rotating database IDs.
+    session_epoch = models.PositiveIntegerField(default=1)
 
     def __str__(self) -> str:
         return f"{self.name} ({self.join_code})"

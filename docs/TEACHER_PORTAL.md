@@ -145,6 +145,7 @@ Operational checklist: `docs/TEACHER_HANDOFF_CHECKLIST.md`.
 
 - `/teach`:
   - class list
+  - one-click `Copy` for class join codes
   - create class
   - generate authoring templates (`.md` + `.docx`) by setting:
     - `course slug`
@@ -173,6 +174,13 @@ Operational checklist: `docs/TEACHER_HANDOFF_CHECKLIST.md`.
 - `/teach/class/<id>`:
   - lesson tracker for one class
   - module/material editor
+  - `Copy` join code
+  - `Printable join card` shortcut for in-room posting
+  - inline student rename controls
+  - roster reset action (clears student identities + submissions, invalidates active student sessions, optional join-code rotation)
+- `/teach/class/<id>/join-card`:
+  - print-friendly join instructions + class code
+  - prefilled join URL (`/?class_code=<JOIN_CODE>`)
 - `/teach/material/<id>/submissions`:
   - submitted vs missing filters
   - bulk download latest submissions as ZIP

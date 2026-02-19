@@ -7,11 +7,27 @@
 
   # Homework Helper
   handle /helper/* {
-    reverse_proxy helper_web:8000
+    request_body {
+      max_size {$CADDY_HELPER_MAX_BODY:1MB}
+    }
+    reverse_proxy helper_web:8000 {
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Real-IP {remote_host}
+      header_up X-Forwarded-Proto {scheme}
+      header_up X-Forwarded-Host {host}
+    }
   }
 
   # Class Hub
   handle {
-    reverse_proxy classhub_web:8000
+    request_body {
+      max_size {$CADDY_CLASSHUB_MAX_BODY:650MB}
+    }
+    reverse_proxy classhub_web:8000 {
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Real-IP {remote_host}
+      header_up X-Forwarded-Proto {scheme}
+      header_up X-Forwarded-Host {host}
+    }
   }
 }

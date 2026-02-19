@@ -1,0 +1,73 @@
+name: test-suite
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  classhub-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install classhub deps
+        run: |
+          pip install -r services/classhub/requirements.txt
+          pip install coverage==7.6.8
+      - name: Django checks (classhub)
+        env:
+          DJANGO_DEBUG: "1"
+          DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+          DJANGO_SECRET_KEY: ci-only-not-used-but-long-enough-for-guards
+          CLASSHUB_UPLOAD_ROOT: /tmp/classhub_uploads
+        run: python services/classhub/manage.py check
+      - name: Tests (classhub with coverage)
+        env:
+          DJANGO_DEBUG: "1"
+          DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+          DJANGO_SECRET_KEY: ci-only-not-used-but-long-enough-for-guards
+          CLASSHUB_UPLOAD_ROOT: /tmp/classhub_uploads
+        run: |
+          coverage run --branch --source=services/classhub/hub services/classhub/manage.py test
+          coverage report -m
+          coverage xml -o coverage-classhub.xml
+      - name: Upload classhub coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-classhub
+          path: coverage-classhub.xml
+
+  helper-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install helper deps
+        run: |
+          pip install -r services/homework_helper/requirements.txt
+          pip install coverage==7.6.8
+      - name: Django checks (helper)
+        env:
+          DJANGO_DEBUG: "1"
+          DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+          DJANGO_SECRET_KEY: ci-only-not-used-but-long-enough-for-guards
+        run: python services/homework_helper/manage.py check
+      - name: Tests (helper with coverage)
+        env:
+          DJANGO_DEBUG: "1"
+          DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+          DJANGO_SECRET_KEY: ci-only-not-used-but-long-enough-for-guards
+        run: |
+          coverage run --branch --source=services/homework_helper/tutor services/homework_helper/manage.py test
+          coverage report -m
+          coverage xml -o coverage-helper.xml
+      - name: Upload helper coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-helper
+          path: coverage-helper.xml

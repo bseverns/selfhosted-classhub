@@ -30,6 +30,7 @@ Core:
 - `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`
 - `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`
 - `DJANGO_SECRET_KEY`
+- `DJANGO_ADMIN_2FA_REQUIRED`
 - `DJANGO_ALLOWED_HOSTS` (include server IP or domain)
 - `CSRF_TRUSTED_ORIGINS`
 
@@ -73,8 +74,9 @@ cp Caddyfile.local Caddyfile
 If you have backups from:
 - `scripts/backup_postgres.sh`
 - `scripts/backup_minio.sh`
+- `scripts/backup_uploads.sh`
 
-Restore Postgres + MinIO before bringing up the stack.
+Restore Postgres + uploads + MinIO before bringing up the stack.
 
 ## 6) Start services
 
@@ -107,6 +109,13 @@ Create first admin:
 ```bash
 cd /srv/lms/compose
 docker compose exec classhub_web python manage.py createsuperuser
+```
+
+Provision admin OTP device:
+
+```bash
+cd /srv/lms/compose
+docker compose exec classhub_web python manage.py bootstrap_admin_otp --username <admin_username> --with-static-backup
 ```
 
 Create a staff teacher account:

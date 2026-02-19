@@ -1,6 +1,7 @@
 Django==5.0.8
 psycopg[binary]==3.2.1
 django-environ==0.11.2
+django-otp==1.6.3
 redis==5.0.8
 gunicorn==22.0.0
 openai==1.55.3

@@ -12,18 +12,6 @@ from django.contrib import admin
 from django.urls import path
 from hub import views
 
-
-def _admin_superuser_only(request) -> bool:
-    # Keep teacher portal separate from Django admin.
-    return bool(request.user.is_active and request.user.is_superuser)
-
-
-admin.site.has_permission = _admin_superuser_only
-admin.site.site_header = "createMPLS Course Admin"
-admin.site.site_title = "createMPLS Course Admin"
-admin.site.index_title = "createMPLS Course Admin"
-admin.site.enable_nav_sidebar = False
-
 urlpatterns = [
     # Admin surface (operations/configuration). Kept separate from daily teaching UI.
     path("admin/", admin.site.urls),
@@ -57,6 +45,9 @@ urlpatterns = [
     path("teach/assets", views.teach_assets),
     path("teach/create-class", views.teach_create_class),
     path("teach/class/<int:class_id>", views.teach_class_dashboard),
+    path("teach/class/<int:class_id>/join-card", views.teach_class_join_card),
+    path("teach/class/<int:class_id>/rename-student", views.teach_rename_student),
+    path("teach/class/<int:class_id>/reset-roster", views.teach_reset_roster),
     path("teach/class/<int:class_id>/toggle-lock", views.teach_toggle_lock),
     path("teach/class/<int:class_id>/rotate-code", views.teach_rotate_code),
     path("teach/class/<int:class_id>/add-module", views.teach_add_module),

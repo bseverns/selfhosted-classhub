@@ -14,6 +14,7 @@ from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
 from django.utils import timezone
 from django.views.decorators.http import require_POST
+from common.helper_scope import issue_scope_token
 
 from ..forms import SubmissionUploadForm
 from ..models import (
@@ -28,6 +29,7 @@ from ..models import (
 from ..services.content_links import parse_course_lesson_url
 from ..services.markdown_content import load_lesson_markdown
 from ..services.release_state import lesson_release_override_map, lesson_release_state
+from ..services.upload_scan import scan_uploaded_file
 from ..services.upload_policy import parse_extensions
 from common.request_safety import client_ip_from_request, fixed_window_allow
 
@@ -208,6 +210,7 @@ def join_class(request):
 
     request.session["student_id"] = student.id
     request.session["class_id"] = classroom.id
+    request.session["class_epoch"] = int(getattr(classroom, "session_epoch", 1) or 1)
 
     response = JsonResponse({"ok": True, "return_code": student.return_code, "rejoined": rejoined})
     _apply_device_hint_cookie(response, classroom, student)
@@ -324,6 +327,12 @@ def student_home(request):
             "helper_topics": "Classroom overview",
             "helper_reference": "",
             "helper_allowed_topics": "",
+            "helper_scope_token": issue_scope_token(
+                context=f"Classroom summary: {classroom.name}",
+                topics=["Classroom overview"],
+                allowed_topics=[],
+                reference="",
+            ),
         },
     )
     get_token(request)
@@ -410,31 +419,53 @@ def material_upload(request, material_id: int):
             elif getattr(f, "size", 0) and f.size > max_bytes:
                 error = f"File too large. Max size: {material.max_upload_mb}MB"
             else:
-                submission = Submission.objects.create(
-                    material=material,
-                    student=request.student,
-                    original_filename=name,
-                    file=f,
-                    note=note,
-                )
-                _emit_student_event(
-                    event_type=StudentEvent.EVENT_SUBMISSION_UPLOAD,
-                    classroom=request.classroom,
-                    student=request.student,
-                    source="classhub.material_upload",
-                    details={
-                        "material_id": material.id,
-                        "submission_id": submission.id,
-                        "original_filename": name[:255],
-                        "size_bytes": int(getattr(f, "size", 0) or 0),
-                    },
-                    ip_address=client_ip_from_request(
-                        request,
-                        trust_proxy_headers=getattr(settings, "REQUEST_SAFETY_TRUST_PROXY_HEADERS", True),
-                        xff_index=getattr(settings, "REQUEST_SAFETY_XFF_INDEX", 0),
-                    ),
-                )
-                return redirect(f"/material/{material.id}/upload")
+                scan_result = scan_uploaded_file(f)
+                fail_closed = bool(getattr(settings, "CLASSHUB_UPLOAD_SCAN_FAIL_CLOSED", False))
+                if scan_result.status == "infected":
+                    logger.warning(
+                        "upload_blocked_malware material_id=%s student_id=%s message=%s",
+                        material.id,
+                        request.student.id,
+                        scan_result.message,
+                    )
+                    error = "Upload blocked by malware scan. Ask your teacher for help."
+                    response_status = 400
+                elif scan_result.status == "error" and fail_closed:
+                    logger.warning(
+                        "upload_blocked_scan_error material_id=%s student_id=%s message=%s",
+                        material.id,
+                        request.student.id,
+                        scan_result.message,
+                    )
+                    error = "Upload scanner unavailable right now. Please try again shortly."
+                    response_status = 503
+                else:
+                    submission = Submission.objects.create(
+                        material=material,
+                        student=request.student,
+                        original_filename=name,
+                        file=f,
+                        note=note,
+                    )
+                    _emit_student_event(
+                        event_type=StudentEvent.EVENT_SUBMISSION_UPLOAD,
+                        classroom=request.classroom,
+                        student=request.student,
+                        source="classhub.material_upload",
+                        details={
+                            "material_id": material.id,
+                            "submission_id": submission.id,
+                            "original_filename": name[:255],
+                            "size_bytes": int(getattr(f, "size", 0) or 0),
+                            "scan_status": scan_result.status,
+                        },
+                        ip_address=client_ip_from_request(
+                            request,
+                            trust_proxy_headers=getattr(settings, "REQUEST_SAFETY_TRUST_PROXY_HEADERS", True),
+                            xff_index=getattr(settings, "REQUEST_SAFETY_XFF_INDEX", 0),
+                        ),
+                    )
+                    return redirect(f"/material/{material.id}/upload")
     else:
         form = SubmissionUploadForm()
 

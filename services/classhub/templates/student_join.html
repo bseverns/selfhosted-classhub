@@ -89,6 +89,17 @@
 
       const csrfToken = () => getCookie('csrftoken') || '';
 
+      (() => {
+        const params = new URLSearchParams(window.location.search || '');
+        const prefillCode = (params.get('class_code') || params.get('code') || '').trim();
+        if (prefillCode) {
+          const codeInput = document.getElementById('code');
+          codeInput.value = prefillCode;
+          const nameInput = document.getElementById('name');
+          if (nameInput) nameInput.focus();
+        }
+      })();
+
       document.getElementById('join-form').addEventListener('submit', async (event) => {
         event.preventDefault();
         msg.style.display = 'none';

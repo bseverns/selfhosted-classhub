@@ -58,7 +58,8 @@ TMP_JOIN="$(mktemp)"
 TMP_HELPER="$(mktemp)"
 TMP_HEADERS="$(mktemp)"
 TMP_TEACH="$(mktemp)"
-trap 'rm -f "${COOKIE_JAR}" "${TMP_JOIN}" "${TMP_HELPER}" "${TMP_HEADERS}" "${TMP_TEACH}"' EXIT
+TMP_STUDENT_PAGE="$(mktemp)"
+trap 'rm -f "${COOKIE_JAR}" "${TMP_JOIN}" "${TMP_HELPER}" "${TMP_HEADERS}" "${TMP_TEACH}" "${TMP_STUDENT_PAGE}"' EXIT
 
 fail() {
   echo "[smoke] FAIL: $*" >&2
@@ -109,12 +110,27 @@ if [[ -n "${CLASS_CODE}" ]]; then
   grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' "${TMP_JOIN}" || fail "/join response missing ok=true: $(cat "${TMP_JOIN}")"
   echo "[smoke] /join OK"
 
+  code="$(curl "${CURL_FLAGS[@]}" -o "${TMP_STUDENT_PAGE}" -w "%{http_code}" \
+    -c "${COOKIE_JAR}" -b "${COOKIE_JAR}" \
+    "${BASE_URL}/student")"
+  [[ "${code}" == "200" ]] || fail "/student returned ${code}"
+
+  SCOPE_TOKEN="$(
+    grep -oE 'data-helper-scope-token="[^"]*"' "${TMP_STUDENT_PAGE}" | head -n1 | sed -E 's/^data-helper-scope-token="(.*)"$/\1/'
+  )"
+
+  if [[ -n "${SCOPE_TOKEN}" ]]; then
+    HELPER_PAYLOAD="$(printf '{"message":"Give one short Scratch hint about moving a sprite.","scope_token":"%s"}' "${SCOPE_TOKEN}")"
+  else
+    HELPER_PAYLOAD='{"message":"Give one short Scratch hint about moving a sprite.","context":"smoke","topics":"scratch"}'
+  fi
+
   code="$(curl "${CURL_FLAGS[@]}" -o "${TMP_HELPER}" -w "%{http_code}" \
     -c "${COOKIE_JAR}" -b "${COOKIE_JAR}" \
     -H "Content-Type: application/json" \
     -H "X-CSRFToken: ${CSRF_TOKEN}" \
     -H "Referer: ${BASE_URL}/" \
-    --data '{"message":"Give one short Scratch hint about moving a sprite.","context":"smoke","topics":"scratch"}' \
+    --data "${HELPER_PAYLOAD}" \
     "${BASE_URL}/helper/chat")"
   [[ "${code}" == "200" ]] || fail "/helper/chat returned ${code}: $(cat "${TMP_HELPER}")"
   grep -Eq '"text"[[:space:]]*:' "${TMP_HELPER}" || fail "/helper/chat response missing text field: $(cat "${TMP_HELPER}")"
