@@ -13,6 +13,8 @@ from django.conf import settings
 
 _COURSES_DIR = Path(settings.CONTENT_ROOT) / "courses"
 _HEADING_LEVEL2_RE = re.compile(r"^##\s+(.+?)\s*$")
+_IMG_TAG_RE = re.compile(r"<img\b[^>]*>", re.IGNORECASE)
+_IMG_SRC_RE = re.compile(r"""\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)')""", re.IGNORECASE)
 _LEGACY_TEACHER_DETAILS_RE = re.compile(r"(?is)<details>\s*<summary>.*?teacher.*?</summary>.*?</details>")
 _TEACHER_SECTION_PREFIXES = (
     "teacher prep",
@@ -260,6 +262,18 @@ def render_markdown_to_safe_html(markdown_text: str) -> str:
         allowed_attrs["img"] = _img_attr_allowed
 
     cleaned = bleach.clean(html, tags=list(allowed_tags), attributes=allowed_attrs, strip=True)
+    if allow_images:
+        # Bleach may leave <img> tags after stripping disallowed src attributes.
+        # Remove any image tag that does not retain an allowed src.
+        def _enforce_img_src(tag_match: re.Match) -> str:
+            tag = tag_match.group(0)
+            src_match = _IMG_SRC_RE.search(tag)
+            if not src_match:
+                return ""
+            src = (src_match.group(1) or src_match.group(2) or "").strip()
+            return tag if _img_src_allowed(src) else ""
+
+        cleaned = _IMG_TAG_RE.sub(_enforce_img_src, cleaned)
     return cleaned
 
 

@@ -14,6 +14,9 @@ from . import views
 class HelperChatAuthTests(TestCase):
     def setUp(self):
         cache.clear()
+        self._topic_filter_patch = patch.dict("os.environ", {"HELPER_TOPIC_FILTER_MODE": "soft"}, clear=False)
+        self._topic_filter_patch.start()
+        self.addCleanup(self._topic_filter_patch.stop)
 
     def _scope_token(self) -> str:
         return issue_scope_token(

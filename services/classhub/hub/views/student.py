@@ -395,6 +395,7 @@ def material_upload(request, material_id: int):
 
     error = ""
     response_status = 200
+    form = SubmissionUploadForm()
 
     if release_state.get("is_locked"):
         available_on = release_state.get("available_on")
@@ -466,9 +467,6 @@ def material_upload(request, material_id: int):
                         ),
                     )
                     return redirect(f"/material/{material.id}/upload")
-    else:
-        form = SubmissionUploadForm()
-
     submissions = Submission.objects.filter(material=material, student=request.student).all()
 
     return render(

@@ -9,7 +9,8 @@ from __future__ import annotations
 import json
 import logging
 
-from django.db import connection
+from django.db import connection, transaction
+from django.db.utils import DatabaseError
 
 logger = logging.getLogger(__name__)
 
@@ -42,5 +43,9 @@ def emit_helper_chat_access_event(
                     ip_address or None,
                 ],
             )
-    except Exception:
+    except DatabaseError:
+        # This write is explicitly best-effort; do not let missing classhub tables
+        # poison the caller's transaction state during tests or local-only runs.
+        if connection.in_atomic_block and connection.needs_rollback:
+            transaction.set_rollback(False)
         logger.exception("helper_chat_student_event_write_failed")

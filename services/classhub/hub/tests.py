@@ -357,7 +357,7 @@ class Teacher2FASetupTests(TestCase):
     def test_invalid_invite_link_returns_400(self):
         resp = self.client.get("/teach/2fa/setup?token=bad-token")
         self.assertEqual(resp.status_code, 400)
-        self.assertContains(resp, "Invalid setup link")
+        self.assertContains(resp, "Invalid setup link", status_code=400)
 
 
 class Admin2FATests(TestCase):
