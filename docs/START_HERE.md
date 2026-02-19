@@ -47,5 +47,6 @@ Documentation hub:
 ## Canonical setup/deploy paths
 
 - Local quickstart: `README.md#quickstart-local`
+- Full self-check: `bash scripts/system_doctor.sh`
 - Production rollout: `docs/DAY1_DEPLOY_CHECKLIST.md`
 - Guardrailed deploy command: `bash scripts/deploy_with_smoke.sh`

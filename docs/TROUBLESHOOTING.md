@@ -13,6 +13,12 @@ Use this method in sequence:
   - data/schema
 4. Apply the smallest reversible fix first.
 
+Fastest full-stack baseline check:
+
+```bash
+bash scripts/system_doctor.sh --smoke-mode basic
+```
+
 ## Fast triage checklist
 
 1. Confirm container health:

@@ -55,6 +55,12 @@ docker compose exec classhub_web python manage.py createsuperuser
 - `http://localhost/healthz`
 - `http://localhost/helper/healthz`
 
+6. Run full stack self-check:
+
+```bash
+bash scripts/system_doctor.sh
+```
+
 ## Docs entrypoint
 
 Start with `docs/README.md` for the documentation contract and map.

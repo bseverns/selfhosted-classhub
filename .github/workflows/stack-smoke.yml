@@ -1,0 +1,33 @@
+name: stack-smoke
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  doctor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare compose env for CI doctor run
+        run: |
+          cp compose/.env.example compose/.env
+          sed -i 's/^CADDYFILE_TEMPLATE=.*/CADDYFILE_TEMPLATE=Caddyfile.local/' compose/.env
+          sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=PstgR4nd0mKeyZeta99/' compose/.env
+          sed -i 's/^MINIO_ROOT_PASSWORD=.*/MINIO_ROOT_PASSWORD=M1n10R4nd0mKeyZeta99/' compose/.env
+          sed -i 's/^DJANGO_SECRET_KEY=.*/DJANGO_SECRET_KEY=classhub-ci-alpha-bravo-charlie-delta-foxtrot-123456/' compose/.env
+          sed -i 's/^DJANGO_DEBUG=.*/DJANGO_DEBUG=0/' compose/.env
+          sed -i 's/^DJANGO_ALLOWED_HOSTS=.*/DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1/' compose/.env
+          sed -i 's/^CSRF_TRUSTED_ORIGINS=.*/CSRF_TRUSTED_ORIGINS=http:\/\/localhost/' compose/.env
+          sed -i 's/^HELPER_LLM_BACKEND=.*/HELPER_LLM_BACKEND=ollama/' compose/.env
+          sed -i 's/^HELPER_TOPIC_FILTER_MODE=.*/HELPER_TOPIC_FILTER_MODE=strict/' compose/.env
+
+      - name: Run system doctor with golden-path smoke
+        run: |
+          bash scripts/system_doctor.sh \
+            --build \
+            --compose-mode prod \
+            --smoke-mode golden \
+            --helper-message "Help me with AP calculus limits."

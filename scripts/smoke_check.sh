@@ -10,10 +10,14 @@ if [[ "${1:-}" == "--strict" ]]; then
 fi
 
 derive_base_url() {
+  local caddyfile_template
   local domain
+  caddyfile_template="$(env_file_value CADDYFILE_TEMPLATE)"
   domain="$(env_file_value DOMAIN)"
 
-  if [[ -n "${domain}" ]]; then
+  if [[ "${caddyfile_template}" == "Caddyfile.local" ]]; then
+    echo "http://localhost"
+  elif [[ -n "${domain}" ]]; then
     echo "https://${domain}"
   else
     echo "http://localhost"
@@ -39,6 +43,8 @@ BASE_URL="${SMOKE_BASE_URL:-$(env_file_value SMOKE_BASE_URL)}"
 BASE_URL="${BASE_URL:-$(derive_base_url)}"
 DISPLAY_NAME="${SMOKE_DISPLAY_NAME:-$(env_file_value SMOKE_DISPLAY_NAME)}"
 DISPLAY_NAME="${DISPLAY_NAME:-Smoke Student}"
+HELPER_MESSAGE="${SMOKE_HELPER_MESSAGE:-$(env_file_value SMOKE_HELPER_MESSAGE)}"
+HELPER_MESSAGE="${HELPER_MESSAGE:-Give one short Scratch hint about moving a sprite.}"
 CLASS_CODE="${SMOKE_CLASS_CODE:-$(env_file_value SMOKE_CLASS_CODE)}"
 TEACHER_USERNAME="${SMOKE_TEACHER_USERNAME:-$(env_file_value SMOKE_TEACHER_USERNAME)}"
 TEACHER_PASSWORD="${SMOKE_TEACHER_PASSWORD:-$(env_file_value SMOKE_TEACHER_PASSWORD)}"
@@ -120,9 +126,9 @@ if [[ -n "${CLASS_CODE}" ]]; then
   )"
 
   if [[ -n "${SCOPE_TOKEN}" ]]; then
-    HELPER_PAYLOAD="$(printf '{"message":"Give one short Scratch hint about moving a sprite.","scope_token":"%s"}' "${SCOPE_TOKEN}")"
+    HELPER_PAYLOAD="$(printf '{"message":"%s","scope_token":"%s"}' "${HELPER_MESSAGE}" "${SCOPE_TOKEN}")"
   else
-    HELPER_PAYLOAD='{"message":"Give one short Scratch hint about moving a sprite.","context":"smoke","topics":"scratch"}'
+    HELPER_PAYLOAD="$(printf '{"message":"%s","context":"smoke","topics":"scratch"}' "${HELPER_MESSAGE}")"
   fi
 
   code="$(curl "${CURL_FLAGS[@]}" -o "${TMP_HELPER}" -w "%{http_code}" \

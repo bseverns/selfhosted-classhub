@@ -233,6 +233,10 @@ bash scripts/smoke_check.sh --strict
 ```bash
 bash scripts/deploy_with_smoke.sh
 ```
+4. Run full stack doctor:
+```bash
+bash scripts/system_doctor.sh --smoke-mode golden
+```
 
 Expected outcomes:
 - migration gate and smoke checks pass with no manual patch-up.

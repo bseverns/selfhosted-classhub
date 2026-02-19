@@ -130,3 +130,9 @@ bash scripts/deploy_with_smoke.sh
 ```
 
 That path intentionally uses only `compose/docker-compose.yml` and adds smoke checks.
+
+For one-command local confidence before pushing:
+
+```bash
+bash scripts/system_doctor.sh --smoke-mode golden
+```

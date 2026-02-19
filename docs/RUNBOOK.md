@@ -29,6 +29,10 @@ What it enforces:
 - Caddy mount guardrail (`/etc/caddy/Caddyfile` must come from selected `compose/Caddyfile.*` template)
 - smoke checks (`/healthz`, `/helper/healthz`, student join, helper chat, teacher login)
 
+Smoke mode options:
+- default `DEPLOY_SMOKE_MODE=strict`: uses preconfigured smoke credentials from `.env`.
+- `DEPLOY_SMOKE_MODE=golden`: auto-provisions class + teacher fixtures, then runs strict smoke.
+
 Optional rollback hook:
 
 ```bash
@@ -100,6 +104,9 @@ GitHub Actions `test-suite` job now uploads:
 - `coverage-classhub.xml`
 - `coverage-helper.xml`
 
+GitHub Actions `stack-smoke` job now runs:
+- `scripts/system_doctor.sh` with golden-path smoke fixture provisioning.
+
 ## Env/secret gate only
 
 ```bash
@@ -108,10 +115,42 @@ bash scripts/validate_env_secrets.sh
 
 This checks `compose/.env` for placeholder/weak secrets and domain routing mismatches before deploy.
 
+## System doctor (single command)
+
+Run full-stack checks in one command:
+
+```bash
+bash scripts/system_doctor.sh
+```
+
+What it runs:
+- env/secret guard
+- compose port exposure guard
+- migration gate
+- content preflight
+- compose health checks
+- smoke checks (`golden` mode by default)
+
+Useful variants:
+
+```bash
+# strict smoke using existing SMOKE_* env values
+bash scripts/system_doctor.sh --smoke-mode strict
+
+# skip smoke (for quick infra-only diagnosis)
+bash scripts/system_doctor.sh --smoke-mode off
+```
+
 ## Smoke checks only
 
 ```bash
 bash scripts/smoke_check.sh --strict
+```
+
+Golden-path smoke (auto fixture provisioning):
+
+```bash
+bash scripts/golden_path_smoke.sh
 ```
 
 ## Caddy request body limits

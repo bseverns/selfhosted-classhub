@@ -36,6 +36,12 @@ For stack-level confidence:
 bash scripts/smoke_check.sh
 ```
 
+For full-stack confidence (recommended):
+
+```bash
+bash scripts/system_doctor.sh --smoke-mode golden
+```
+
 If any command fails because of local environment constraints, note that explicitly in PR notes.
 
 ## 4) Docs + decision hygiene

@@ -21,11 +21,13 @@ See `scripts/bootstrap_day1.sh` for an automated starter.
   - `CADDY_CLASSHUB_MAX_BODY` (uploads; default `650MB`)
   - `CADDY_HELPER_MAX_BODY` (helper API; default `1MB`)
 - Configure LLM backend (default is Ollama; ensure it is running)
-- Configure smoke-check credentials in `compose/.env`:
+- Configure smoke-check credentials in `compose/.env` (for strict mode):
   - `SMOKE_BASE_URL`
   - `SMOKE_CLASS_CODE`
   - `SMOKE_TEACHER_USERNAME`
   - `SMOKE_TEACHER_PASSWORD`
+- Optional: use fixture-backed golden smoke mode to avoid managing static smoke credentials:
+  - `DEPLOY_SMOKE_MODE=golden bash scripts/deploy_with_smoke.sh`
 - Run content preflight checks (blocks bad lesson video/copy sync):
   - `bash scripts/content_preflight.sh piper_scratch_12_session`
 - Validate deploy secrets and routing env:
@@ -34,6 +36,8 @@ See `scripts/bootstrap_day1.sh` for an automated starter.
   - `bash scripts/migration_gate.sh`
 - Run deterministic production deploy + smoke:
   - `bash scripts/deploy_with_smoke.sh`
+- Run one-command end-to-end diagnostic:
+  - `bash scripts/system_doctor.sh`
 - Manual production compose fallback (if needed):
   - `docker compose -f docker-compose.yml up -d --build`
 - Create first superuser

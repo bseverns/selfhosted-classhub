@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="${ROOT_DIR}/compose/docker-compose.yml"
 MIGRATION_GATE="${ROOT_DIR}/scripts/migration_gate.sh"
 SMOKE_CHECK="${ROOT_DIR}/scripts/smoke_check.sh"
+GOLDEN_SMOKE="${ROOT_DIR}/scripts/golden_path_smoke.sh"
 ENV_CHECK="${ROOT_DIR}/scripts/validate_env_secrets.sh"
 LAST_GOOD_FILE="${ROOT_DIR}/.deploy/last_good_ref"
 
@@ -95,7 +96,12 @@ fi
 echo "[deploy] caddy mount guardrail OK"
 
 SMOKE_MODE="${DEPLOY_SMOKE_MODE:-strict}"
-if [[ "${SMOKE_MODE}" == "strict" ]]; then
+if [[ "${SMOKE_MODE}" == "golden" ]]; then
+  set +e
+  "${GOLDEN_SMOKE}" --compose-mode prod --skip-up
+  smoke_status=$?
+  set -e
+elif [[ "${SMOKE_MODE}" == "strict" ]]; then
   set +e
   "${SMOKE_CHECK}" --strict
   smoke_status=$?
