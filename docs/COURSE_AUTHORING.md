@@ -68,6 +68,35 @@ Notes:
 - DOCX works best if section titles are on their own line (e.g., “Materials”, “Agenda”).
 - The script prints a warning if no `Session 01: Title` headers are found.
 
+## Generate teacher templates (`.md` + `.docx`)
+
+If teachers need a pre-formatted starter file, generate templates keyed by course slug:
+
+```bash
+python3 scripts/generate_authoring_templates.py \
+  --slug scratch_game_design \
+  --title "Scratch Game Design + Cutscenes Lab" \
+  --sessions 12 \
+  --duration 75 \
+  --age-band "5th-7th"
+```
+
+Default output folder:
+
+- `docs/examples/course_authoring/<slug>-teacher-plan-template.md`
+- `docs/examples/course_authoring/<slug>-teacher-plan-template.docx`
+- `docs/examples/course_authoring/<slug>-public-overview-template.md`
+- `docs/examples/course_authoring/<slug>-public-overview-template.docx`
+
+These files are formatted to match the ingest parser in `scripts/ingest_syllabus_md.py`
+(`Session NN: Title`, `Mission`, `Teacher prep`, `Materials`, `Checkpoints`,
+`Common stuck points + fixes`, `Extensions`).
+
+Teacher UI option:
+- Staff users can generate the same templates from `/teach` (Teacher Portal home)
+  by filling in the same four fields: slug, title, sessions, duration.
+- The same card shows direct download links for any generated files for that slug.
+
 ## Change the course title after scaffolding
 
 1) Update the course manifest:

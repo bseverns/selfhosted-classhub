@@ -38,6 +38,32 @@
       .table-wrap tbody tr:last-child td {
         border-bottom: 0;
       }
+      .notice {
+        margin-bottom: 12px;
+        padding: 10px 12px;
+        border: 1px solid rgba(32, 125, 82, 0.35);
+        border-radius: 10px;
+        background: rgba(216, 246, 231, 0.65);
+        color: #1f5f45;
+      }
+      .error {
+        margin-bottom: 12px;
+        padding: 10px 12px;
+        border: 1px solid rgba(182, 56, 56, 0.35);
+        border-radius: 10px;
+        background: rgba(255, 224, 224, 0.58);
+        color: #8f2d2d;
+      }
+      .grid-2 {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      }
+      .download-list {
+        margin: 10px 0 0 0;
+        padding-left: 18px;
+      }
+      .download-list li { margin: 4px 0; }
     </style>
   </head>
   <body class="glass-theme">
@@ -56,6 +82,13 @@
           <div class="muted">Signed in as <strong>{{ request.user.username }}</strong></div>
         </div>
 
+        {% if notice %}
+          <div class="notice" role="status" aria-live="polite">{{ notice }}</div>
+        {% endif %}
+        {% if error %}
+          <div class="error" role="alert" aria-live="assertive">{{ error }}</div>
+        {% endif %}
+
         <div class="card">
           <h2 style="margin:0 0 10px 0">Create a class</h2>
           <form method="post" action="/teach/create-class">
@@ -68,6 +101,52 @@
               <button type="submit">Create class</button>
             </div>
           </form>
+        </div>
+
+        <div class="card">
+          <h2 style="margin:0 0 10px 0">Generate Course Authoring Templates</h2>
+          <div class="muted" style="margin-bottom:10px">
+            Create pre-formatted `.md` and `.docx` starter files for teachers.
+          </div>
+          <form method="post" action="/teach/generate-authoring-templates">
+            {% csrf_token %}
+            <div class="grid-2">
+              <div>
+                <label for="template-slug">Course slug</label>
+                <input id="template-slug" name="template_slug" value="{{ template_slug }}" placeholder="scratch_game_design" required />
+              </div>
+              <div>
+                <label for="template-title">Course title</label>
+                <input id="template-title" name="template_title" value="{{ template_title }}" placeholder="Scratch Game Design + Cutscenes Lab" required />
+              </div>
+              <div>
+                <label for="template-sessions">Sessions</label>
+                <input id="template-sessions" name="template_sessions" type="number" min="1" max="60" value="{{ template_sessions }}" required />
+              </div>
+              <div>
+                <label for="template-duration">Session duration (minutes)</label>
+                <input id="template-duration" name="template_duration" type="number" min="15" max="240" value="{{ template_duration }}" required />
+              </div>
+            </div>
+            <div class="muted" style="margin-top:10px">Files are written to <code>{{ template_output_dir }}</code>.</div>
+            <div class="submit-wrap">
+              <button type="submit">Generate templates</button>
+            </div>
+          </form>
+          {% if template_download_rows %}
+            <h3 style="margin:14px 0 6px 0">Download files for <code>{{ template_slug }}</code></h3>
+            <ul class="download-list">
+              {% for row in template_download_rows %}
+                <li>
+                  {% if row.exists %}
+                    <a href="{{ row.url }}">{{ row.label }}</a>
+                  {% else %}
+                    <span class="muted">{{ row.label }} (not generated yet)</span>
+                  {% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% endif %}
         </div>
 
         <div class="card">

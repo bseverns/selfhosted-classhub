@@ -1,12 +1,15 @@
 import json
+import tempfile
 from io import StringIO
 from datetime import timedelta
+from pathlib import Path
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from .models import AuditEvent, Class, LessonRelease, Material, Module, StudentEvent, StudentIdentity, Submission
@@ -75,6 +78,90 @@ class TeacherPortalTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Recent submissions")
         self.assertContains(resp, "Ada")
+        self.assertContains(resp, "Generate Course Authoring Templates")
+
+    @patch("hub.views.teacher.generate_authoring_templates")
+    def test_teach_home_can_generate_authoring_templates(self, mock_generate):
+        mock_generate.return_value.output_paths = [
+            Path("/uploads/authoring_templates/sample-teacher-plan-template.md"),
+            Path("/uploads/authoring_templates/sample-teacher-plan-template.docx"),
+            Path("/uploads/authoring_templates/sample-public-overview-template.md"),
+            Path("/uploads/authoring_templates/sample-public-overview-template.docx"),
+        ]
+        self.client.force_login(self.staff)
+
+        resp = self.client.post(
+            "/teach/generate-authoring-templates",
+            {
+                "template_slug": "sample_slug",
+                "template_title": "Sample Course",
+                "template_sessions": "12",
+                "template_duration": "75",
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/teach?notice=", resp["Location"])
+        self.assertIn("template_slug=sample_slug", resp["Location"])
+
+        mock_generate.assert_called_once()
+        kwargs = mock_generate.call_args.kwargs
+        self.assertEqual(kwargs["slug"], "sample_slug")
+        self.assertEqual(kwargs["title"], "Sample Course")
+        self.assertEqual(kwargs["sessions"], 12)
+        self.assertEqual(kwargs["duration"], 75)
+        self.assertTrue(kwargs["overwrite"])
+
+        event = AuditEvent.objects.filter(action="teacher_templates.generate").first()
+        self.assertIsNotNone(event)
+        self.assertEqual(event.actor_user_id, self.staff.id)
+        self.assertEqual(event.target_id, "sample_slug")
+
+    @patch("hub.views.teacher.generate_authoring_templates")
+    def test_teach_home_template_generator_rejects_invalid_slug(self, mock_generate):
+        self.client.force_login(self.staff)
+        resp = self.client.post(
+            "/teach/generate-authoring-templates",
+            {
+                "template_slug": "Bad Slug",
+                "template_title": "Sample Course",
+                "template_sessions": "12",
+                "template_duration": "75",
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/teach?error=", resp["Location"])
+        mock_generate.assert_not_called()
+
+    def test_teach_home_shows_template_download_links_for_selected_slug(self):
+        self.client.force_login(self.staff)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            template_dir = Path(temp_dir)
+            (template_dir / "sample_slug-teacher-plan-template.md").write_text("hello", encoding="utf-8")
+            with override_settings(CLASSHUB_AUTHORING_TEMPLATE_DIR=template_dir):
+                resp = self.client.get("/teach?template_slug=sample_slug")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "/teach/authoring-template/download?slug=sample_slug&amp;kind=teacher_plan_md")
+        self.assertContains(resp, "sample_slug-teacher-plan-template.docx (not generated yet)")
+
+    def test_staff_can_download_generated_authoring_template(self):
+        self.client.force_login(self.staff)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            template_dir = Path(temp_dir)
+            expected_path = template_dir / "sample_slug-teacher-plan-template.md"
+            expected_path.write_text("sample-body", encoding="utf-8")
+            with override_settings(CLASSHUB_AUTHORING_TEMPLATE_DIR=template_dir):
+                resp = self.client.get("/teach/authoring-template/download?slug=sample_slug&kind=teacher_plan_md")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("attachment;", resp["Content-Disposition"])
+        self.assertIn("sample_slug-teacher-plan-template.md", resp["Content-Disposition"])
+        body = b"".join(resp.streaming_content)
+        self.assertEqual(body, b"sample-body")
+
+        event = AuditEvent.objects.filter(action="teacher_templates.download").first()
+        self.assertIsNotNone(event)
+        self.assertEqual(event.actor_user_id, self.staff.id)
 
     def test_teacher_logout_ends_staff_session(self):
         self.client.force_login(self.staff)

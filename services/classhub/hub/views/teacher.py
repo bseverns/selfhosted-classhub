@@ -6,6 +6,7 @@ import zipfile
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
+from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import logout as auth_logout
 from django.db import IntegrityError, models
@@ -28,6 +29,7 @@ from ..models import (
 )
 from ..services.content_links import parse_course_lesson_url, safe_filename
 from ..services.markdown_content import load_lesson_markdown, load_teacher_material_html
+from ..services.authoring_templates import generate_authoring_templates
 from ..services.audit import log_audit_event
 from ..services.release_state import (
     lesson_release_override_map,
@@ -35,6 +37,15 @@ from ..services.release_state import (
     parse_release_date,
 )
 from .content import iter_course_lesson_options
+
+
+_TEMPLATE_SLUG_RE = re.compile(r"^[a-z0-9_-]+$")
+_AUTHORING_TEMPLATE_SUFFIXES = {
+    "teacher_plan_md": "teacher-plan-template.md",
+    "teacher_plan_docx": "teacher-plan-template.docx",
+    "public_overview_md": "public-overview-template.md",
+    "public_overview_docx": "public-overview-template.docx",
+}
 
 
 def teacher_logout(request):
@@ -215,12 +226,18 @@ def _safe_teacher_return_path(raw: str, fallback: str) -> str:
     return (raw or "").strip() or fallback
 
 
-def _with_notice(path: str, notice: str = "", error: str = "") -> str:
+def _with_notice(path: str, notice: str = "", error: str = "", extra: dict | None = None) -> str:
     params = {}
     if notice:
         params["notice"] = notice
     if error:
         params["error"] = error
+    for key, value in (extra or {}).items():
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            params[key] = text
     if not params:
         return path
     sep = "&" if "?" in path else "?"
@@ -251,6 +268,30 @@ def _lesson_video_redirect_params(course_slug: str, lesson_slug: str, class_id: 
 def _normalize_optional_slug_tag(raw: str) -> str:
     value = re.sub(r"[^A-Za-z0-9_-]+", "-", (raw or "").strip().lower())
     return value.strip("-_")
+
+
+def _parse_positive_int(raw: str, *, min_value: int, max_value: int) -> int | None:
+    value = (raw or "").strip()
+    if not value:
+        return None
+    try:
+        parsed = int(value)
+    except Exception:
+        return None
+    if parsed < min_value or parsed > max_value:
+        return None
+    return parsed
+
+
+def _authoring_template_output_dir() -> Path:
+    return Path(getattr(settings, "CLASSHUB_AUTHORING_TEMPLATE_DIR", "/uploads/authoring_templates"))
+
+
+def _authoring_template_file_path(slug: str, kind: str) -> Path | None:
+    suffix = _AUTHORING_TEMPLATE_SUFFIXES.get(kind)
+    if not suffix:
+        return None
+    return _authoring_template_output_dir() / f"{slug}-{suffix}"
 
 
 def _lesson_asset_redirect_params(folder_id: int = 0, course_slug: str = "", lesson_slug: str = "", status: str = "all", notice: str = "") -> str:
@@ -745,19 +786,145 @@ def teach_assets(request):
 @staff_member_required
 def teach_home(request):
     """Teacher landing page (outside /admin)."""
+    notice = (request.GET.get("notice") or "").strip()
+    error = (request.GET.get("error") or "").strip()
+    template_slug = (request.GET.get("template_slug") or "").strip()
+    template_title = (request.GET.get("template_title") or "").strip()
+    template_sessions = (request.GET.get("template_sessions") or "").strip()
+    template_duration = (request.GET.get("template_duration") or "").strip()
+
     classes = Class.objects.all().order_by("name", "id")
     recent_submissions = list(
         Submission.objects.select_related("student", "material__module__classroom")
         .all()[:20]
     )
+    output_dir = _authoring_template_output_dir()
+    template_download_rows: list[dict] = []
+    if template_slug and _TEMPLATE_SLUG_RE.match(template_slug):
+        for kind, suffix in _AUTHORING_TEMPLATE_SUFFIXES.items():
+            path = _authoring_template_file_path(template_slug, kind)
+            exists = bool(path and path.exists() and path.is_file())
+            template_download_rows.append(
+                {
+                    "kind": kind,
+                    "label": f"{template_slug}-{suffix}",
+                    "exists": exists,
+                    "url": f"/teach/authoring-template/download?slug={template_slug}&kind={kind}",
+                }
+            )
+
     return render(
         request,
         "teach_home.html",
         {
             "classes": classes,
             "recent_submissions": recent_submissions,
+            "notice": notice,
+            "error": error,
+            "template_slug": template_slug,
+            "template_title": template_title,
+            "template_sessions": template_sessions or "12",
+            "template_duration": template_duration or "75",
+            "template_output_dir": str(output_dir),
+            "template_download_rows": template_download_rows,
         },
     )
+
+
+@staff_member_required
+@require_POST
+def teach_generate_authoring_templates(request):
+    slug = (request.POST.get("template_slug") or "").strip().lower()
+    title = (request.POST.get("template_title") or "").strip()
+    sessions_raw = (request.POST.get("template_sessions") or "").strip()
+    duration_raw = (request.POST.get("template_duration") or "").strip()
+
+    form_values = {
+        "template_slug": slug,
+        "template_title": title,
+        "template_sessions": sessions_raw,
+        "template_duration": duration_raw,
+    }
+    return_to = "/teach"
+
+    if not slug:
+        return redirect(_with_notice(return_to, error="Course slug is required.", extra=form_values))
+    if not _TEMPLATE_SLUG_RE.match(slug):
+        return redirect(_with_notice(return_to, error="Course slug can use lowercase letters, numbers, underscores, and dashes.", extra=form_values))
+    if not title:
+        return redirect(_with_notice(return_to, error="Course title is required.", extra=form_values))
+
+    sessions = _parse_positive_int(sessions_raw, min_value=1, max_value=60)
+    if sessions is None:
+        return redirect(_with_notice(return_to, error="Sessions must be a whole number between 1 and 60.", extra=form_values))
+
+    duration = _parse_positive_int(duration_raw, min_value=15, max_value=240)
+    if duration is None:
+        return redirect(_with_notice(return_to, error="Session duration must be between 15 and 240 minutes.", extra=form_values))
+
+    age_band = (getattr(settings, "CLASSHUB_AUTHORING_TEMPLATE_AGE_BAND_DEFAULT", "5th-7th") or "5th-7th").strip()
+    output_dir = Path(getattr(settings, "CLASSHUB_AUTHORING_TEMPLATE_DIR", "/uploads/authoring_templates"))
+
+    try:
+        result = generate_authoring_templates(
+            slug=slug,
+            title=title,
+            sessions=sessions,
+            duration=duration,
+            age_band=age_band,
+            out_dir=output_dir,
+            overwrite=True,
+        )
+    except (OSError, ValueError) as exc:
+        return redirect(_with_notice(return_to, error=f"Template generation failed: {exc}", extra=form_values))
+
+    _audit(
+        request,
+        action="teacher_templates.generate",
+        target_type="AuthoringTemplates",
+        target_id=slug,
+        summary=f"Generated authoring templates for {slug}",
+        metadata={
+            "slug": slug,
+            "title": title,
+            "sessions": sessions,
+            "duration": duration,
+            "output_dir": str(output_dir),
+            "files": [str(path) for path in result.output_paths],
+        },
+    )
+    notice = f"Generated templates for {slug} in {output_dir}."
+    return redirect(_with_notice(return_to, notice=notice, extra=form_values))
+
+
+@staff_member_required
+def teach_download_authoring_template(request):
+    slug = (request.GET.get("slug") or "").strip().lower()
+    kind = (request.GET.get("kind") or "").strip()
+
+    if not slug or not _TEMPLATE_SLUG_RE.match(slug):
+        return HttpResponse("Invalid template slug.", status=400)
+
+    path = _authoring_template_file_path(slug, kind)
+    if path is None:
+        return HttpResponse("Invalid template kind.", status=400)
+
+    output_dir = _authoring_template_output_dir().resolve()
+    candidate = path.resolve()
+    if not candidate.is_relative_to(output_dir):
+        return HttpResponse("Invalid template path.", status=400)
+    if not candidate.exists() or not candidate.is_file():
+        return HttpResponse("Template file not found.", status=404)
+
+    _audit(
+        request,
+        action="teacher_templates.download",
+        target_type="AuthoringTemplates",
+        target_id=f"{slug}:{kind}",
+        summary=f"Downloaded authoring template {candidate.name}",
+        metadata={"slug": slug, "kind": kind, "path": str(candidate)},
+    )
+    return FileResponse(candidate.open("rb"), as_attachment=True, filename=candidate.name)
 
 
 @staff_member_required

@@ -138,6 +138,14 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Downloads go through a permission-checked Django view.
 MEDIA_ROOT = Path(os.environ.get("CLASSHUB_UPLOAD_ROOT", "/uploads"))
 MEDIA_URL = "/_uploads/"
+# Teacher-generated authoring templates (from /teach landing page action).
+CLASSHUB_AUTHORING_TEMPLATE_DIR = Path(
+    os.environ.get("CLASSHUB_AUTHORING_TEMPLATE_DIR", "/uploads/authoring_templates")
+)
+CLASSHUB_AUTHORING_TEMPLATE_AGE_BAND_DEFAULT = os.environ.get(
+    "CLASSHUB_AUTHORING_TEMPLATE_AGE_BAND_DEFAULT",
+    "5th-7th",
+).strip() or "5th-7th"
 
 # Conservative defaults; raise if you expect large assets.
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 5MB (larger files stream to disk)

@@ -12,6 +12,7 @@ Historical implementation logs and superseded decisions are archived by month in
 - [Request safety and helper access posture](#request-safety-and-helper-access-posture)
 - [Observability and retention boundaries](#observability-and-retention-boundaries)
 - [Deployment guardrails](#deployment-guardrails)
+- [Teacher authoring templates](#teacher-authoring-templates)
 
 ## Archive Index
 
@@ -111,3 +112,16 @@ Historical implementation logs and superseded decisions are archived by month in
 **Why this remains active:**
 - Prevents avoidable outages from config drift.
 - Catches regressions before users encounter them.
+
+## Teacher authoring templates
+
+**Current decision:**
+- Provide a script (`scripts/generate_authoring_templates.py`) that outputs both `.md` and `.docx` teacher templates keyed by course slug.
+- Keep template sections aligned with `scripts/ingest_syllabus_md.py` parsing rules so teachers can fill in and import without manual reformatting.
+- Expose the generator in the teacher landing page (`/teach`) with four required fields: slug, title, sessions, and duration.
+- Provide staff-only direct download links for generated files from the same `/teach` card.
+- Store UI-generated files under `CLASSHUB_AUTHORING_TEMPLATE_DIR` (default `/uploads/authoring_templates`) to avoid write dependencies on source mounts.
+
+**Why this remains active:**
+- Teachers can author in familiar formats (Markdown or Word) while preserving deterministic ingestion.
+- Reduces onboarding friction and avoids repeated format mistakes in session-plan documents.

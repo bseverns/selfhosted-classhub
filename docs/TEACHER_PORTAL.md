@@ -146,6 +146,12 @@ Operational checklist: `docs/TEACHER_HANDOFF_CHECKLIST.md`.
 - `/teach`:
   - class list
   - create class
+  - generate authoring templates (`.md` + `.docx`) by setting:
+    - `course slug`
+    - `course title`
+    - `sessions`
+    - `session duration (minutes)`
+  - download generated template files directly from the same card (per slug)
   - recent submissions queue
 - `/teach/lessons`:
   - lesson tracker grouped by class
