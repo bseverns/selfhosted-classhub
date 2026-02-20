@@ -324,6 +324,7 @@ Historical implementation logs and superseded decisions are archived by month in
 - UI templates use local/system font stacks only (no Google Fonts network calls).
 - CI now guards against non-localhost published ports for internal services (`scripts/check_compose_port_exposure.py`).
 - CI now includes secret scanning and Python dependency vulnerability scanning (`.github/workflows/security.yml`).
+- CI stack-smoke now sets a non-placeholder `CLASSHUB_INTERNAL_EVENTS_TOKEN` before running `scripts/system_doctor.sh`.
 
 **Why this remains active:**
 - Reduces accidental public exposure of internal services.

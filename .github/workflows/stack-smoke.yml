@@ -18,6 +18,7 @@ jobs:
           sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=aaaaaaaaaaaaaaaa/' compose/.env
           sed -i 's/^MINIO_ROOT_PASSWORD=.*/MINIO_ROOT_PASSWORD=bbbbbbbbbbbbbbbb/' compose/.env
           sed -i 's/^DJANGO_SECRET_KEY=.*/DJANGO_SECRET_KEY=cccccccccccccccccccccccccccccccc/' compose/.env
+          sed -i 's/^CLASSHUB_INTERNAL_EVENTS_TOKEN=.*/CLASSHUB_INTERNAL_EVENTS_TOKEN=dddddddddddddddd/' compose/.env
           sed -i 's/^DJANGO_DEBUG=.*/DJANGO_DEBUG=0/' compose/.env
           sed -i 's/^DJANGO_ALLOWED_HOSTS=.*/DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1/' compose/.env
           sed -i 's/^CSRF_TRUSTED_ORIGINS=.*/CSRF_TRUSTED_ORIGINS=http:\/\/localhost/' compose/.env
