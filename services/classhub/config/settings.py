@@ -242,6 +242,7 @@ CLASSHUB_ASSET_BASE_URL = env("CLASSHUB_ASSET_BASE_URL", default="").strip().rst
 # Safe-by-default: only trust forwarded headers when explicitly enabled.
 REQUEST_SAFETY_TRUST_PROXY_HEADERS = env.bool("REQUEST_SAFETY_TRUST_PROXY_HEADERS", default=False)
 REQUEST_SAFETY_XFF_INDEX = env.int("REQUEST_SAFETY_XFF_INDEX", default=0)
+CLASSHUB_INTERNAL_EVENTS_TOKEN = env("CLASSHUB_INTERNAL_EVENTS_TOKEN", default="").strip()
 ADMIN_2FA_REQUIRED = env.bool("DJANGO_ADMIN_2FA_REQUIRED", default=True)
 TEACHER_2FA_REQUIRED = env.bool("DJANGO_TEACHER_2FA_REQUIRED", default=True)
 CSP_REPORT_ONLY_POLICY = env(

@@ -108,6 +108,7 @@ require_nonempty "MINIO_ROOT_USER"
 
 if [[ "${DJANGO_DEBUG}" == "0" ]]; then
   require_strong_secret "DJANGO_SECRET_KEY" 32
+  require_strong_secret "CLASSHUB_INTERNAL_EVENTS_TOKEN" 16
   ADMIN_2FA_REQUIRED="$(env_file_value DJANGO_ADMIN_2FA_REQUIRED)"
   ADMIN_2FA_REQUIRED="${ADMIN_2FA_REQUIRED:-1}"
   if [[ "${ADMIN_2FA_REQUIRED}" != "1" ]]; then

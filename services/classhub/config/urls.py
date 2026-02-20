@@ -18,6 +18,7 @@ urlpatterns = [
 
     # Health endpoint for reverse proxy and uptime checks.
     path("healthz", views.healthz),
+    path("internal/events/helper-chat-access", views.internal_helper_chat_access_event),
 
     # Student flow (class-code login and classroom page).
     path("", views.index),

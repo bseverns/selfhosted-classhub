@@ -16,6 +16,7 @@ Historical implementation logs and superseded decisions are archived by month in
 - [Teacher authoring templates](#teacher-authoring-templates)
 - [Teacher UI comfort mode](#teacher-ui-comfort-mode)
 - [Helper scope signing](#helper-scope-signing)
+- [Helper event ingestion boundary](#helper-event-ingestion-boundary)
 - [Helper grounding for Piper hardware](#helper-grounding-for-piper-hardware)
 - [Helper lesson citations](#helper-lesson-citations)
 - [Production transport hardening](#production-transport-hardening)
@@ -272,6 +273,17 @@ Historical implementation logs and superseded decisions are archived by month in
 **Why this remains active:**
 - Prevents students from broadening helper scope by editing browser requests.
 - Preserves lesson-scoped helper behavior without coupling helper directly to classhub content mounts.
+
+## Helper event ingestion boundary
+
+**Current decision:**
+- Homework Helper no longer writes directly to Class Hub tables.
+- Helper emits metadata-only chat access events to `POST /internal/events/helper-chat-access` on Class Hub.
+- Endpoint is authenticated with `CLASSHUB_INTERNAL_EVENTS_TOKEN` and appends `StudentEvent` rows server-side.
+
+**Why this remains active:**
+- Removes raw cross-service SQL writes and keeps ownership of `StudentEvent` writes inside Class Hub.
+- Preserves append-only telemetry behavior while reducing coupling between services.
 
 ## Helper grounding for Piper hardware
 

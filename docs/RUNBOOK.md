@@ -349,6 +349,23 @@ Delete:
 rm -f /tmp/classhub_closeout_*.zip /tmp/classhub_latest_*.zip
 ```
 
+## Helper event ingest check
+
+Helper chat telemetry now forwards through an authenticated internal Class Hub endpoint.
+
+Required env:
+
+- `CLASSHUB_INTERNAL_EVENTS_URL`
+- `CLASSHUB_INTERNAL_EVENTS_TOKEN`
+
+Quick validation:
+
+```bash
+cd /srv/lms/app
+bash scripts/validate_env_secrets.sh
+bash scripts/system_doctor.sh --smoke-mode golden
+```
+
 ### Automate retention + orphan cleanup
 
 Run once manually:

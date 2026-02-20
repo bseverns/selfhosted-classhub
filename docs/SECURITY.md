@@ -19,6 +19,7 @@ If you only do three things before production:
 | Helper scope protection | Student helper calls require signed `scope_token` |
 | Upload access | Not public `/media`; downloads are permission-checked views |
 | Auditing | Staff mutations logged as immutable `AuditEvent` rows |
+| Helper event ingest | Authenticated internal endpoint (token-gated) |
 
 ## Day-1 production checklist
 
@@ -40,6 +41,8 @@ If you only do three things before production:
 9. Confirm edge request size limits are set:
    - `CADDY_CLASSHUB_MAX_BODY`
    - `CADDY_HELPER_MAX_BODY`
+10. Set a strong cross-service event token:
+   - `CLASSHUB_INTERNAL_EVENTS_TOKEN`
 
 ## Authentication and authorization boundaries
 
@@ -111,6 +114,9 @@ bash scripts/retention_maintenance.sh --compose-mode prod
 ## Helper-specific controls
 
 - Unsigned helper scope fields (`context/topics/allowed_topics/reference`) are ignored.
+- Helper access telemetry is forwarded to Class Hub via authenticated internal endpoint:
+  - `CLASSHUB_INTERNAL_EVENTS_URL`
+  - `CLASSHUB_INTERNAL_EVENTS_TOKEN`
 - Student helper session-table checks are configurable:
   - default: fail-open when classhub tables are unavailable
   - production hardening option: `HELPER_REQUIRE_CLASSHUB_TABLE=1` (fail-closed)

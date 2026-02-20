@@ -1339,3 +1339,69 @@ class ClassHubSecurityHeaderTests(TestCase):
         resp = self.client.get("/healthz")
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp["Content-Security-Policy-Report-Only"], "default-src 'self'")
+
+
+class InternalHelperEventEndpointTests(TestCase):
+    def setUp(self):
+        self.classroom = Class.objects.create(name="Internal Event Class", join_code="INT12345")
+        self.student = StudentIdentity.objects.create(classroom=self.classroom, display_name="Ada")
+        self.url = "/internal/events/helper-chat-access"
+        self.token = "internal-event-token-12345"
+
+    @override_settings(CLASSHUB_INTERNAL_EVENTS_TOKEN="")
+    def test_internal_event_endpoint_returns_503_without_configured_token(self):
+        resp = self.client.post(
+            self.url,
+            data=json.dumps({"classroom_id": self.classroom.id, "student_id": self.student.id}),
+            content_type="application/json",
+            HTTP_X_CLASSHUB_INTERNAL_TOKEN=self.token,
+        )
+        self.assertEqual(resp.status_code, 503)
+
+    @override_settings(CLASSHUB_INTERNAL_EVENTS_TOKEN="expected-token")
+    def test_internal_event_endpoint_rejects_invalid_token(self):
+        resp = self.client.post(
+            self.url,
+            data=json.dumps({"classroom_id": self.classroom.id, "student_id": self.student.id}),
+            content_type="application/json",
+            HTTP_X_CLASSHUB_INTERNAL_TOKEN="wrong-token",
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    @override_settings(CLASSHUB_INTERNAL_EVENTS_TOKEN="expected-token")
+    def test_internal_event_endpoint_appends_student_event(self):
+        payload = {
+            "classroom_id": self.classroom.id,
+            "student_id": self.student.id,
+            "ip_address": "127.0.0.1",
+            "details": {"request_id": "req-123", "actor_type": "student"},
+        }
+        resp = self.client.post(
+            self.url,
+            data=json.dumps(payload),
+            content_type="application/json",
+            HTTP_X_CLASSHUB_INTERNAL_TOKEN="expected-token",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json().get("ok"))
+
+        event = StudentEvent.objects.filter(event_type=StudentEvent.EVENT_HELPER_CHAT_ACCESS).order_by("-id").first()
+        self.assertIsNotNone(event)
+        self.assertEqual(event.classroom_id, self.classroom.id)
+        self.assertEqual(event.student_id, self.student.id)
+        self.assertEqual(event.source, "homework_helper.chat")
+        self.assertEqual(event.details.get("request_id"), "req-123")
+
+    @override_settings(CLASSHUB_INTERNAL_EVENTS_TOKEN="expected-token")
+    def test_internal_event_endpoint_skips_when_payload_has_no_actor(self):
+        resp = self.client.post(
+            self.url,
+            data=json.dumps({"details": {"request_id": "req-123"}}),
+            content_type="application/json",
+            HTTP_X_CLASSHUB_INTERNAL_TOKEN="expected-token",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json().get("skipped"), "no_actor")
+        self.assertFalse(
+            StudentEvent.objects.filter(event_type=StudentEvent.EVENT_HELPER_CHAT_ACCESS).exists()
+        )

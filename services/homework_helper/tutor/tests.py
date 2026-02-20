@@ -1,6 +1,7 @@
 import json
 import tempfile
 import urllib.error
+from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,6 +11,7 @@ from django.db.utils import ProgrammingError
 from django.test import TestCase, override_settings
 from common.helper_scope import issue_scope_token
 
+from . import classhub_events
 from . import views
 
 
@@ -315,6 +317,7 @@ class HelperChatAuthTests(TestCase):
         self.assertEqual(build_kwargs["topics"], [])
         self.assertEqual(build_kwargs["allowed_topics"], [])
 
+
     @override_settings(HELPER_REQUIRE_SCOPE_TOKEN_FOR_STAFF=True)
     @patch("tutor.views._ollama_chat", return_value=("Hint", "fake-model"))
     @patch.dict("os.environ", {"HELPER_LLM_BACKEND": "ollama"}, clear=False)
@@ -461,6 +464,68 @@ class HelperChatAuthTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(resp.json().get("truncated"))
         self.assertEqual(len(resp.json().get("text") or ""), 220)
+
+
+class ClassHubEventForwardingTests(TestCase):
+    @override_settings(
+        CLASSHUB_INTERNAL_EVENTS_URL="http://classhub_web:8000/internal/events/helper-chat-access",
+        CLASSHUB_INTERNAL_EVENTS_TOKEN="token-123",
+        CLASSHUB_INTERNAL_EVENTS_TIMEOUT_SECONDS=3,
+    )
+    def test_emit_helper_chat_access_event_posts_to_internal_endpoint(self):
+        with patch("tutor.classhub_events.urllib.request.urlopen") as urlopen_mock:
+            response = SimpleNamespace(status=200)
+            urlopen_mock.return_value.__enter__.return_value = response
+            classhub_events.emit_helper_chat_access_event(
+                classroom_id=5,
+                student_id=101,
+                ip_address="127.0.0.1",
+                details={"request_id": "req-1"},
+            )
+
+        req = urlopen_mock.call_args.args[0]
+        self.assertEqual(req.full_url, "http://classhub_web:8000/internal/events/helper-chat-access")
+        self.assertEqual(req.get_method(), "POST")
+        self.assertEqual(req.headers.get("Content-type"), "application/json")
+        self.assertEqual(req.headers.get("X-classhub-internal-token"), "token-123")
+        self.assertEqual(urlopen_mock.call_args.kwargs.get("timeout"), 3)
+
+    @override_settings(
+        CLASSHUB_INTERNAL_EVENTS_URL="",
+        CLASSHUB_INTERNAL_EVENTS_TOKEN="",
+    )
+    def test_emit_helper_chat_access_event_skips_when_config_missing(self):
+        with patch("tutor.classhub_events.urllib.request.urlopen") as urlopen_mock:
+            classhub_events.emit_helper_chat_access_event(
+                classroom_id=5,
+                student_id=101,
+                ip_address="127.0.0.1",
+                details={"request_id": "req-1"},
+            )
+        self.assertFalse(urlopen_mock.called)
+
+    @override_settings(
+        CLASSHUB_INTERNAL_EVENTS_URL="http://classhub_web:8000/internal/events/helper-chat-access",
+        CLASSHUB_INTERNAL_EVENTS_TOKEN="token-123",
+    )
+    def test_emit_helper_chat_access_event_swallows_http_errors(self):
+        with patch(
+            "tutor.classhub_events.urllib.request.urlopen",
+            side_effect=urllib.error.HTTPError(
+                url="http://classhub_web:8000/internal/events/helper-chat-access",
+                code=403,
+                msg="forbidden",
+                hdrs=None,
+                fp=None,
+            ),
+        ) as urlopen_mock:
+            classhub_events.emit_helper_chat_access_event(
+                classroom_id=5,
+                student_id=101,
+                ip_address="127.0.0.1",
+                details={"request_id": "req-1"},
+            )
+        self.assertTrue(urlopen_mock.called)
 
 
 class HelperAdminAccessTests(TestCase):
