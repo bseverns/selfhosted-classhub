@@ -124,6 +124,7 @@ class TeacherPortalTests(TestCase):
         self.assertContains(resp, "Recent submissions")
         self.assertContains(resp, "Ada")
         self.assertContains(resp, "Generate Course Authoring Templates")
+        self.assertContains(resp, "Invite teacher")
 
     def test_teach_home_shows_since_yesterday_digest(self):
         classroom, upload = self._build_lesson_with_submission()

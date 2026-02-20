@@ -1081,6 +1081,9 @@ def teach_home(request):
     teacher_email = (request.GET.get("teacher_email") or "").strip()
     teacher_first_name = (request.GET.get("teacher_first_name") or "").strip()
     teacher_last_name = (request.GET.get("teacher_last_name") or "").strip()
+    teacher_invite_active = bool(
+        teacher_username or teacher_email or teacher_first_name or teacher_last_name
+    )
 
     classes = list(Class.objects.all().order_by("name", "id"))
     digest_since = timezone.now() - timedelta(days=1)
@@ -1131,6 +1134,7 @@ def teach_home(request):
             "teacher_email": teacher_email,
             "teacher_first_name": teacher_first_name,
             "teacher_last_name": teacher_last_name,
+            "teacher_invite_active": teacher_invite_active,
         },
     )
 

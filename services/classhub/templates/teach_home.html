@@ -110,6 +110,27 @@
         padding: 7px 10px;
         font-size: 13px;
       }
+      .top-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .top-tab {
+        border: 1px solid rgba(22, 59, 80, 0.26);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.5);
+        color: #12394f;
+        padding: 8px 14px;
+        font-weight: 700;
+      }
+      .top-tab[aria-selected="true"] {
+        background: linear-gradient(155deg, #12394f, #0f3042);
+        color: #eef7fb;
+      }
+      .top-tab-panel[hidden] {
+        display: none;
+      }
     </style>
   </head>
   <body class="glass-theme teacher-comfort">
@@ -135,103 +156,116 @@
           <div class="error" role="alert" aria-live="assertive">{{ error }}</div>
         {% endif %}
 
-        <div class="card">
-          <h2 style="margin:0 0 10px 0">Create a class</h2>
-          <form method="post" action="/teach/create-class">
-            {% csrf_token %}
-            <div style="max-width:520px">
-              <label for="class-name">Class name</label>
-              <input id="class-name" name="name" placeholder="e.g., Piper + Scratch (Period 3)" />
-            </div>
-            <div class="submit-wrap">
-              <button type="submit">Create class</button>
-            </div>
-          </form>
-        </div>
-
-        {% if request.user.is_superuser %}
-          <div class="card">
-            <h2 style="margin:0 0 10px 0">Create Teacher Account + Invite</h2>
-            <div class="muted" style="margin-bottom:10px">
-              Creates a staff account and emails a one-click 2FA setup link.
-            </div>
-            <form method="post" action="/teach/create-teacher">
-              {% csrf_token %}
-              <div class="grid-2">
-                <div>
-                  <label for="teacher-username">Username</label>
-                  <input id="teacher-username" name="username" value="{{ teacher_username }}" required />
-                </div>
-                <div>
-                  <label for="teacher-email">Email</label>
-                  <input id="teacher-email" name="email" type="email" value="{{ teacher_email }}" required />
-                </div>
-                <div>
-                  <label for="teacher-first-name">First name</label>
-                  <input id="teacher-first-name" name="first_name" value="{{ teacher_first_name }}" />
-                </div>
-                <div>
-                  <label for="teacher-last-name">Last name</label>
-                  <input id="teacher-last-name" name="last_name" value="{{ teacher_last_name }}" />
-                </div>
-                <div>
-                  <label for="teacher-password">Starting password</label>
-                  <input id="teacher-password" name="password" type="password" required />
-                </div>
-                <div style="display:flex;align-items:flex-end">
-                  <label style="display:flex;gap:8px;align-items:center;margin:0">
-                    <input type="checkbox" name="email_include_password" value="1" />
-                    Include temporary password in email
-                  </label>
-                </div>
-              </div>
-              <p class="helper-note">If unchecked, share the starting password with the teacher in a separate secure channel.</p>
-              <div class="submit-wrap">
-                <button type="submit">Create teacher + send invite</button>
-              </div>
-            </form>
-
-            {% if teacher_accounts %}
-              <div class="table-wrap" style="margin-top:14px">
-                <table class="teacher-account-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">Username</th>
-                      <th scope="col">Name / Email</th>
-                      <th scope="col">Role</th>
-                      <th scope="col">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {% for account in teacher_accounts %}
-                      <tr>
-                        <td><strong>{{ account.username }}</strong></td>
-                        <td>
-                          <div>{{ account.first_name }} {{ account.last_name }}</div>
-                          <div class="muted">{{ account.email|default:"(no email)" }}</div>
-                        </td>
-                        <td>
-                          {% if account.is_superuser %}
-                            Superuser
-                          {% else %}
-                            Staff
-                          {% endif %}
-                        </td>
-                        <td>
-                          {% if account.is_active %}
-                            <span class="state-pill state-pill--open">Active</span>
-                          {% else %}
-                            <span class="state-pill state-pill--locked">Disabled</span>
-                          {% endif %}
-                        </td>
-                      </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </div>
+        <div class="card" data-tabs data-initial-tab="{% if teacher_invite_active %}invite-teacher{% else %}quick-actions{% endif %}">
+          <div class="top-tabs" role="tablist" aria-label="Teacher top actions">
+            <button type="button" class="top-tab" id="tab-quick-actions" role="tab" aria-controls="panel-quick-actions" aria-selected="true">
+              Class setup
+            </button>
+            {% if request.user.is_superuser %}
+              <button type="button" class="top-tab" id="tab-invite-teacher" role="tab" aria-controls="panel-invite-teacher" aria-selected="false">
+                Invite teacher
+              </button>
             {% endif %}
           </div>
-        {% endif %}
+
+          <section class="top-tab-panel" id="panel-quick-actions" role="tabpanel" aria-labelledby="tab-quick-actions">
+            <h2 style="margin:0 0 10px 0">Create a class</h2>
+            <form method="post" action="/teach/create-class">
+              {% csrf_token %}
+              <div style="max-width:520px">
+                <label for="class-name">Class name</label>
+                <input id="class-name" name="name" placeholder="e.g., Piper + Scratch (Period 3)" />
+              </div>
+              <div class="submit-wrap">
+                <button type="submit">Create class</button>
+              </div>
+            </form>
+          </section>
+
+          {% if request.user.is_superuser %}
+            <section class="top-tab-panel" id="panel-invite-teacher" role="tabpanel" aria-labelledby="tab-invite-teacher" hidden>
+              <h2 style="margin:0 0 10px 0">Create Teacher Account + Invite</h2>
+              <div class="muted" style="margin-bottom:10px">
+                Creates a staff account and emails a one-click 2FA setup link.
+              </div>
+              <form method="post" action="/teach/create-teacher">
+                {% csrf_token %}
+                <div class="grid-2">
+                  <div>
+                    <label for="teacher-username">Username</label>
+                    <input id="teacher-username" name="username" value="{{ teacher_username }}" required />
+                  </div>
+                  <div>
+                    <label for="teacher-email">Email</label>
+                    <input id="teacher-email" name="email" type="email" value="{{ teacher_email }}" required />
+                  </div>
+                  <div>
+                    <label for="teacher-first-name">First name</label>
+                    <input id="teacher-first-name" name="first_name" value="{{ teacher_first_name }}" />
+                  </div>
+                  <div>
+                    <label for="teacher-last-name">Last name</label>
+                    <input id="teacher-last-name" name="last_name" value="{{ teacher_last_name }}" />
+                  </div>
+                  <div>
+                    <label for="teacher-password">Starting password</label>
+                    <input id="teacher-password" name="password" type="password" required />
+                  </div>
+                  <div style="display:flex;align-items:flex-end">
+                    <label style="display:flex;gap:8px;align-items:center;margin:0">
+                      <input type="checkbox" name="email_include_password" value="1" />
+                      Include temporary password in email
+                    </label>
+                  </div>
+                </div>
+                <p class="helper-note">If unchecked, share the starting password with the teacher in a separate secure channel.</p>
+                <div class="submit-wrap">
+                  <button type="submit">Create teacher + send invite</button>
+                </div>
+              </form>
+
+              {% if teacher_accounts %}
+                <div class="table-wrap" style="margin-top:14px">
+                  <table class="teacher-account-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Username</th>
+                        <th scope="col">Name / Email</th>
+                        <th scope="col">Role</th>
+                        <th scope="col">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for account in teacher_accounts %}
+                        <tr>
+                          <td><strong>{{ account.username }}</strong></td>
+                          <td>
+                            <div>{{ account.first_name }} {{ account.last_name }}</div>
+                            <div class="muted">{{ account.email|default:"(no email)" }}</div>
+                          </td>
+                          <td>
+                            {% if account.is_superuser %}
+                              Superuser
+                            {% else %}
+                              Staff
+                            {% endif %}
+                          </td>
+                          <td>
+                            {% if account.is_active %}
+                              <span class="state-pill state-pill--open">Active</span>
+                            {% else %}
+                              <span class="state-pill state-pill--locked">Disabled</span>
+                            {% endif %}
+                          </td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              {% endif %}
+            </section>
+          {% endif %}
+        </div>
 
         <div class="card">
           <h2 style="margin:0 0 10px 0">Generate Course Authoring Templates</h2>
@@ -437,6 +471,50 @@
     </div>
     <script>
       (function () {
+        const tabRoot = document.querySelector("[data-tabs]");
+        if (tabRoot) {
+          const tabs = Array.from(tabRoot.querySelectorAll("[role='tab']"));
+          const panels = Array.from(tabRoot.querySelectorAll("[role='tabpanel']"));
+          const activate = (tabId) => {
+            tabs.forEach((tab) => {
+              const active = tab.id === tabId;
+              tab.setAttribute("aria-selected", active ? "true" : "false");
+              tab.tabIndex = active ? 0 : -1;
+            });
+            panels.forEach((panel) => {
+              const active = panel.getAttribute("aria-labelledby") === tabId;
+              panel.hidden = !active;
+            });
+          };
+
+          const initialTab = tabRoot.getAttribute("data-initial-tab") || "quick-actions";
+          const initial = tabs.find((tab) => tab.id === `tab-${initialTab}`) || tabs[0];
+          if (initial) activate(initial.id);
+
+          tabs.forEach((tab, index) => {
+            tab.addEventListener("click", () => activate(tab.id));
+            tab.addEventListener("keydown", (event) => {
+              if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+                event.preventDefault();
+                const delta = event.key === "ArrowRight" ? 1 : -1;
+                const next = (index + delta + tabs.length) % tabs.length;
+                tabs[next].focus();
+                activate(tabs[next].id);
+              }
+              if (event.key === "Home") {
+                event.preventDefault();
+                tabs[0].focus();
+                activate(tabs[0].id);
+              }
+              if (event.key === "End") {
+                event.preventDefault();
+                tabs[tabs.length - 1].focus();
+                activate(tabs[tabs.length - 1].id);
+              }
+            });
+          });
+        }
+
         const status = document.getElementById("copy-status");
         const buttons = document.querySelectorAll("[data-copy-value]");
         if (!status || !buttons.length) return;
