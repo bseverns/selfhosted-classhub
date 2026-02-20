@@ -428,9 +428,11 @@ Historical implementation logs and superseded decisions are archived by month in
   - `Content-Security-Policy: default-src 'none'; sandbox`
   - `Referrer-Policy: no-referrer`
 - Return codes are masked by default in student and teacher pages, with explicit `Show/Hide` and `Copy` controls.
+- Return-code pages and submission downloads set `Cache-Control: private, no-store` to reduce shared-device/back-button exposure.
 - Student event payloads are reduced to low-sensitivity metadata (for example, join mode and file extension), avoiding display-name/class-code duplication.
 - Cache-backed limiter helpers now tolerate corrupt cache state without raising request-path errors (fail-open with warning logs including request id).
 - Release archives now run a reusable artifact lint check (`scripts/lint_release_artifact.py`) and exclude local/runtime secrets and state (`compose/.env` + local backup variants, `data/`, `.deploy/`).
+- `safe_filename` now lives in a dedicated filename service module (`hub/services/filenames.py`) and is imported where needed.
 
 **Why this remains active:**
 - Reduces content-sniffing and filename abuse risk on download endpoints.

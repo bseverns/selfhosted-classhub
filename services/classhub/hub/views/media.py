@@ -8,7 +8,8 @@ from django.db.utils import OperationalError, ProgrammingError
 from django.http import FileResponse, HttpResponse, StreamingHttpResponse
 
 from ..models import LessonAsset, LessonVideo
-from ..services.content_links import safe_filename, video_mime_type
+from ..services.content_links import video_mime_type
+from ..services.filenames import safe_filename
 
 _INLINE_ASSET_MIME_TYPES = {
     "image/png",

@@ -29,7 +29,7 @@ from ..models import (
     gen_student_return_code,
 )
 from ..services.content_links import parse_course_lesson_url
-from ..services.content_links import safe_filename
+from ..services.filenames import safe_filename
 from ..services.markdown_content import load_lesson_markdown
 from ..services.release_state import lesson_release_override_map, lesson_release_state
 from ..services.upload_scan import scan_uploaded_file
@@ -344,7 +344,7 @@ def student_home(request):
     )
     get_token(request)
 
-    return render(
+    response = render(
         request,
         "student_class.html",
         {
@@ -356,6 +356,8 @@ def student_home(request):
             "helper_widget": helper_widget,
         },
     )
+    response["Cache-Control"] = "private, no-store"
+    return response
 
 
 def student_portfolio_export(request):
@@ -626,6 +628,7 @@ def submission_download(request, submission_id: int):
     response["X-Content-Type-Options"] = "nosniff"
     response["Content-Security-Policy"] = "default-src 'none'; sandbox"
     response["Referrer-Policy"] = "no-referrer"
+    response["Cache-Control"] = "private, no-store"
     return response
 
 

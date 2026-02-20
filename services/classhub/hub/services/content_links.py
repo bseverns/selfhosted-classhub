@@ -7,6 +7,8 @@ from urllib.parse import parse_qs, urlparse
 
 from django.conf import settings
 
+from .filenames import safe_filename
+
 _YOUTUBE_HOSTS = {
     "youtube.com",
     "www.youtube.com",
@@ -160,10 +162,3 @@ def normalize_lesson_videos(front_matter: dict) -> list[dict]:
             }
         )
     return normalized
-
-
-def safe_filename(value: str) -> str:
-    name = (value or "file").strip()
-    name = re.sub(r"[^A-Za-z0-9._-]+", "_", name)
-    name = name.strip("._")
-    return name or "file"

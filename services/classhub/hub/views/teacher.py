@@ -41,7 +41,8 @@ from ..models import (
     Submission,
     gen_class_code,
 )
-from ..services.content_links import build_asset_url, parse_course_lesson_url, safe_filename
+from ..services.content_links import build_asset_url, parse_course_lesson_url
+from ..services.filenames import safe_filename
 from ..services.markdown_content import load_lesson_markdown, load_teacher_material_html
 from ..services.authoring_templates import generate_authoring_templates
 from ..services.audit import log_audit_event
@@ -1716,7 +1717,7 @@ def teach_class_dashboard(request, class_id: int):
     notice = (request.GET.get("notice") or "").strip()
     error = (request.GET.get("error") or "").strip()
 
-    return render(
+    response = render(
         request,
         "teach_class.html",
         {
@@ -1731,6 +1732,8 @@ def teach_class_dashboard(request, class_id: int):
             "error": error,
         },
     )
+    response["Cache-Control"] = "private, no-store"
+    return response
 
 
 @staff_member_required

@@ -214,6 +214,7 @@ class TeacherPortalTests(TestCase):
 
         resp = self.client.get(f"/teach/class/{classroom.id}")
         self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Cache-Control"], "private, no-store")
         self.assertContains(resp, "••••••")
         self.assertNotContains(resp, f">{student.return_code}<", html=False)
         self.assertContains(resp, "Show")
@@ -754,6 +755,7 @@ class LessonReleaseTests(TestCase):
 
         resp = self.client.get("/student")
         self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Cache-Control"], "private, no-store")
         self.assertContains(resp, "••••••")
         self.assertNotContains(resp, f">{self.student.return_code}<", html=False)
         self.assertContains(resp, "Copy return code")
@@ -1194,6 +1196,7 @@ class SubmissionDownloadHardeningTests(TestCase):
         self._login_student()
         resp = self.client.get(f"/submission/{self.submission.id}/download")
         self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Cache-Control"], "private, no-store")
         self.assertEqual(resp["X-Content-Type-Options"], "nosniff")
         self.assertEqual(resp["Content-Security-Policy"], "default-src 'none'; sandbox")
         self.assertEqual(resp["Referrer-Policy"], "no-referrer")

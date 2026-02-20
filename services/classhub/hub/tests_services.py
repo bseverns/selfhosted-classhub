@@ -20,8 +20,8 @@ from .services.content_links import (
     build_asset_url,
     normalize_lesson_videos,
     parse_course_lesson_url,
-    safe_filename,
 )
+from .services.filenames import safe_filename
 from .services.release_state import (
     lesson_available_on,
     lesson_release_state,
