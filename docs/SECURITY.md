@@ -126,7 +126,8 @@ Enable command-based scanning (for example ClamAV):
 
 ## Content security policy rollout
 
-Use `DJANGO_CSP_REPORT_ONLY_POLICY` first, then enforce later.
+With `DJANGO_DEBUG=0`, Class Hub now ships with a default report-only CSP baseline.
+Set `DJANGO_CSP_REPORT_ONLY_POLICY` to override it (or to empty string to disable).
 
 Suggested rollout:
 
@@ -135,9 +136,14 @@ Suggested rollout:
 3. Tighten directives iteratively.
 4. Enforce only after classroom pages are clean.
 
-Starter example:
+Starter override example:
 
 `DJANGO_CSP_REPORT_ONLY_POLICY=default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'`
+
+If you use:
+
+- YouTube embeds: include `frame-src https://www.youtube.com https://www.youtube-nocookie.com`
+- Separate asset host: include your asset origin in `img-src`, `media-src`, and `connect-src` as needed (for example `https://assets.creatempls.org`)
 
 ## Future hardening candidates
 

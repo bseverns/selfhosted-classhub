@@ -26,6 +26,8 @@ Typical request flow:
 
 Optional advanced limiter:
 - `token_bucket_allow(...)` for smoother refill behavior.
+- Both limiter helpers are fail-open on cache backend errors (requests continue).
+- Pass `request_id=...` when available so cache warnings can be traced in logs.
 
 ## Shared env knobs
 

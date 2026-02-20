@@ -253,6 +253,10 @@ Optional output path:
 bash scripts/make_release_zip.sh /srv/lms/releases/classhub_release.zip
 ```
 
+Release packaging policy and verification details:
+
+- `docs/RELEASING.md`
+
 ## Retention operations
 
 ### Submission retention

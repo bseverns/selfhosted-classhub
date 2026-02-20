@@ -4,8 +4,14 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import SimpleTestCase, override_settings
+from django.contrib.sessions.middleware import SessionMiddleware
+from django.http import HttpResponse
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 
+from common.request_safety import fixed_window_allow, token_bucket_allow
+
+from .middleware import StudentSessionMiddleware
+from .models import Class, StudentIdentity
 from .services.markdown_content import (
     render_markdown_to_safe_html,
     split_lesson_markdown_for_audiences,
@@ -53,6 +59,39 @@ class UploadPolicyServiceTests(SimpleTestCase):
         self.assertEqual(row["type"], "file")
         self.assertEqual(row["accepted_exts"], [".sb3", ".png"])
         self.assertEqual(row["naming"], "studentname_session")
+
+
+class _FailingCache:
+    def get(self, key):
+        raise RuntimeError("cache down")
+
+    def set(self, key, value, timeout=None):
+        raise RuntimeError("cache down")
+
+    def incr(self, key):
+        raise RuntimeError("cache down")
+
+
+class RequestSafetyRateLimitResilienceTests(SimpleTestCase):
+    def test_fixed_window_allow_fails_open_when_cache_backend_errors(self):
+        allowed = fixed_window_allow(
+            "rl:test:key",
+            limit=1,
+            window_seconds=60,
+            cache_backend=_FailingCache(),
+            request_id="req-cache-down",
+        )
+        self.assertTrue(allowed)
+
+    def test_token_bucket_allow_fails_open_when_cache_backend_errors(self):
+        allowed = token_bucket_allow(
+            "tb:test:key",
+            capacity=10,
+            refill_per_second=1.0,
+            cache_backend=_FailingCache(),
+            request_id="req-cache-down",
+        )
+        self.assertTrue(allowed)
 
 
 class ReleaseStateServiceTests(SimpleTestCase):
@@ -222,3 +261,51 @@ class ContentLinksServiceTests(SimpleTestCase):
             build_asset_url("/lesson-video/3/stream"),
             "https://assets.example.org/lesson-video/3/stream",
         )
+
+
+class StudentSessionMiddlewareTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.classroom = Class.objects.create(name="Session Class", join_code="SESS1234")
+        self.student = StudentIdentity.objects.create(classroom=self.classroom, display_name="Ada")
+        self.middleware = StudentSessionMiddleware(lambda _request: HttpResponse("ok"))
+
+    def _request_with_student_session(self, path: str):
+        request = self.factory.get(path)
+        session_middleware = SessionMiddleware(lambda _request: HttpResponse("ok"))
+        session_middleware.process_request(request)
+        request.session["student_id"] = self.student.id
+        request.session["class_id"] = self.classroom.id
+        request.session["class_epoch"] = self.classroom.session_epoch
+        request.session.save()
+        return request
+
+    def test_healthz_path_skips_student_lookup_queries(self):
+        request = self._request_with_student_session("/healthz")
+        with self.assertNumQueries(0):
+            self.middleware(request)
+        self.assertIsNone(request.student)
+        self.assertIsNone(request.classroom)
+
+    def test_static_path_skips_student_lookup_queries(self):
+        request = self._request_with_student_session("/static/app.css")
+        with self.assertNumQueries(0):
+            self.middleware(request)
+        self.assertIsNone(request.student)
+        self.assertIsNone(request.classroom)
+
+    def test_admin_path_skips_student_lookup_queries(self):
+        request = self._request_with_student_session("/admin/")
+        with self.assertNumQueries(0):
+            self.middleware(request)
+        self.assertIsNone(request.student)
+        self.assertIsNone(request.classroom)
+
+    def test_student_path_uses_single_query_and_attaches_student_context(self):
+        request = self._request_with_student_session("/student")
+        with self.assertNumQueries(1):
+            self.middleware(request)
+        self.assertIsNotNone(request.student)
+        self.assertIsNotNone(request.classroom)
+        self.assertEqual(request.student.id, self.student.id)
+        self.assertEqual(request.classroom.id, self.classroom.id)

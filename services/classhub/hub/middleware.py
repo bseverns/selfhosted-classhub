@@ -8,7 +8,21 @@ This is the central trick that makes class-code auth feel like a real login.
 Later, this becomes the access-control boundary for the helper and for content.
 """
 
-from .models import StudentIdentity, Class
+from .models import StudentIdentity
+
+_SESSION_SKIP_PREFIXES = (
+    "/static/",
+    "/admin/",
+    "/helper/",
+)
+_SESSION_SKIP_EXACT = {"/healthz"}
+
+
+def _clear_student_session(session) -> None:
+    session.pop("student_id", None)
+    session.pop("class_id", None)
+    session.pop("class_epoch", None)
+
 
 class StudentSessionMiddleware:
     """Attach learner context to each request if a student session exists.
@@ -28,6 +42,9 @@ class StudentSessionMiddleware:
         # Default state for anonymous/teacher requests.
         request.student = None
         request.classroom = None
+        path = (getattr(request, "path", "") or "").strip()
+        if path in _SESSION_SKIP_EXACT or any(path.startswith(prefix) for prefix in _SESSION_SKIP_PREFIXES):
+            return self.get_response(request)
 
         # Student identity is stored in the session after `/join`.
         sid = request.session.get("student_id")
@@ -35,14 +52,15 @@ class StudentSessionMiddleware:
         class_epoch = request.session.get("class_epoch")
 
         if sid and cid:
-            # Resolve both records on each request so downstream views can rely
-            # on object-level access without repeating session parsing.
-            student = StudentIdentity.objects.filter(id=sid, classroom_id=cid).first()
-            classroom = Class.objects.filter(id=cid).first()
+            # Resolve both records in one query via select_related.
+            student = (
+                StudentIdentity.objects.select_related("classroom")
+                .filter(id=sid, classroom_id=cid)
+                .first()
+            )
+            classroom = getattr(student, "classroom", None) if student is not None else None
             if student is None or classroom is None:
-                request.session.pop("student_id", None)
-                request.session.pop("class_id", None)
-                request.session.pop("class_epoch", None)
+                _clear_student_session(request.session)
                 request.student = None
                 request.classroom = None
             else:
@@ -57,9 +75,7 @@ class StudentSessionMiddleware:
                     except Exception:
                         session_epoch = -1
                     if session_epoch != current_epoch:
-                        request.session.pop("student_id", None)
-                        request.session.pop("class_id", None)
-                        request.session.pop("class_epoch", None)
+                        _clear_student_session(request.session)
                         request.student = None
                         request.classroom = None
                     else:

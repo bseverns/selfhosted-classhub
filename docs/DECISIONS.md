@@ -192,6 +192,7 @@ Historical implementation logs and superseded decisions are archived by month in
 - Helper chat requires either authenticated staff context or valid student classroom session context.
 - Student session validation checks classhub identity rows when table access is available, and fails open when classhub tables are unavailable.
 - Shared request-safety helpers are canonical for proxy-aware client IP parsing and cache-backed limiter behavior.
+- Shared limiter helpers fail open when cache backends error, and emit request-id-tagged warnings when available.
 - Helper admin follows superuser-only access, matching classhub admin posture.
 
 **Why this remains active:**
@@ -304,7 +305,7 @@ Historical implementation logs and superseded decisions are archived by month in
 - Caddy explicitly sets forwarded IP/proto headers before proxying to Django.
 - Proxy-header trust is explicit opt-in (`REQUEST_SAFETY_TRUST_PROXY_HEADERS=0` by default).
 - Caddy enforces request-body limits per upstream (`CADDY_CLASSHUB_MAX_BODY`, `CADDY_HELPER_MAX_BODY`).
-- Both Django services can emit CSP in report-only mode via `DJANGO_CSP_REPORT_ONLY_POLICY`.
+- Class Hub emits a report-only CSP baseline by default in production; `DJANGO_CSP_REPORT_ONLY_POLICY` can override/tune it.
 - Both Django services reject weak/default secret keys when `DJANGO_DEBUG=0`.
 - Deploy flow includes automated `.env` validation via `scripts/validate_env_secrets.sh`.
 - Security headers and HTTPS controls are enabled in production through explicit env knobs (`DJANGO_SECURE_*`).

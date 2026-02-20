@@ -21,6 +21,10 @@ cd "${ROOT_DIR}"
 zip -r "${OUT_ABS}" . \
   -x ".git/*" \
   -x ".venv/*" \
+  -x "media/*" \
+  -x "*/media/*" \
+  -x "staticfiles/*" \
+  -x "*/staticfiles/*" \
   -x "__MACOSX/*" \
   -x "*/__pycache__/*" \
   -x "*.pyc" \

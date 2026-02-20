@@ -17,11 +17,56 @@ Service-specific limit knobs remain local to each service:
 
 from __future__ import annotations
 
+import logging
 import ipaddress
 import time
 from typing import Mapping
 
 from django.core.cache import cache as default_cache
+
+logger = logging.getLogger(__name__)
+
+
+def _log_cache_warning(
+    *,
+    op: str,
+    key: str,
+    request_id: str,
+    exc: Exception,
+) -> None:
+    rid = (request_id or "").strip() or "unknown"
+    logger.warning(
+        "request_safety_cache_warning request_id=%s op=%s key=%s error=%s",
+        rid,
+        op,
+        key,
+        exc.__class__.__name__,
+    )
+
+
+def _cache_get(store, key: str, *, request_id: str):
+    try:
+        return store.get(key), True
+    except Exception as exc:
+        _log_cache_warning(op="get", key=key, request_id=request_id, exc=exc)
+        return None, False
+
+
+def _cache_set(store, key: str, value, *, timeout: int, request_id: str) -> bool:
+    try:
+        store.set(key, value, timeout=timeout)
+        return True
+    except Exception as exc:
+        _log_cache_warning(op="set", key=key, request_id=request_id, exc=exc)
+        return False
+
+
+def _cache_incr(store, key: str, *, request_id: str):
+    try:
+        return store.incr(key), True
+    except Exception as exc:
+        _log_cache_warning(op="incr", key=key, request_id=request_id, exc=exc)
+        return None, False
 
 
 def parse_client_ip(
@@ -86,22 +131,29 @@ def fixed_window_allow(
     limit: int,
     window_seconds: int,
     cache_backend=None,
+    request_id: str = "",
 ) -> bool:
     if limit <= 0:
         return True
     store = cache_backend or default_cache
     window = max(int(window_seconds), 1)
 
-    current = store.get(key)
+    current, ok = _cache_get(store, key, request_id=request_id)
+    if not ok:
+        # Fail-open: request handling must continue when cache backend is down.
+        return True
     if current is None:
-        store.set(key, 1, timeout=window)
+        _cache_set(store, key, 1, timeout=window, request_id=request_id)
         return True
     if int(current) >= limit:
         return False
-    try:
-        store.incr(key)
-    except Exception:
-        store.set(key, int(current) + 1, timeout=window)
+    _, incr_ok = _cache_incr(store, key, request_id=request_id)
+    if not incr_ok:
+        try:
+            next_value = int(current) + 1
+        except Exception:
+            next_value = 1
+        _cache_set(store, key, next_value, timeout=window, request_id=request_id)
     return True
 
 
@@ -112,6 +164,7 @@ def token_bucket_allow(
     refill_per_second: float,
     cost: float = 1.0,
     cache_backend=None,
+    request_id: str = "",
 ) -> bool:
     if capacity <= 0 or refill_per_second <= 0 or cost <= 0:
         return False
@@ -120,7 +173,11 @@ def token_bucket_allow(
     now = time.monotonic()
     ttl = max(int((capacity / refill_per_second) * 4), 1)
 
-    state = store.get(key) or {"tokens": float(capacity), "last": now}
+    state, ok = _cache_get(store, key, request_id=request_id)
+    if not ok:
+        # Fail-open: allow requests when limiter state cannot be read.
+        return True
+    state = state or {"tokens": float(capacity), "last": now}
     tokens = float(state.get("tokens", capacity))
     last = float(state.get("last", now))
 
@@ -131,7 +188,7 @@ def token_bucket_allow(
     if allowed:
         tokens -= float(cost)
 
-    store.set(key, {"tokens": tokens, "last": now}, timeout=ttl)
+    _cache_set(store, key, {"tokens": tokens, "last": now}, timeout=ttl, request_id=request_id)
     return allowed
 
 

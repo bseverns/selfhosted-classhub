@@ -168,6 +168,19 @@ TIME_ZONE = env("DJANGO_TIME_ZONE", default="America/Chicago").strip() or "Ameri
 USE_I18N = True
 USE_TZ = True
 
+_DEFAULT_CSP_REPORT_ONLY_POLICY = (
+    "default-src 'self'; "
+    "base-uri 'self'; "
+    "object-src 'none'; "
+    "frame-ancestors 'self'; "
+    "img-src 'self' data: https:; "
+    "media-src 'self' https:; "
+    "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; "
+    "style-src 'self' 'unsafe-inline'; "
+    "script-src 'self' 'unsafe-inline'; "
+    "connect-src 'self' https:;"
+)
+
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STORAGES = {
@@ -231,7 +244,10 @@ REQUEST_SAFETY_TRUST_PROXY_HEADERS = env.bool("REQUEST_SAFETY_TRUST_PROXY_HEADER
 REQUEST_SAFETY_XFF_INDEX = env.int("REQUEST_SAFETY_XFF_INDEX", default=0)
 ADMIN_2FA_REQUIRED = env.bool("DJANGO_ADMIN_2FA_REQUIRED", default=True)
 TEACHER_2FA_REQUIRED = env.bool("DJANGO_TEACHER_2FA_REQUIRED", default=True)
-CSP_REPORT_ONLY_POLICY = env("DJANGO_CSP_REPORT_ONLY_POLICY", default="").strip()
+CSP_REPORT_ONLY_POLICY = env(
+    "DJANGO_CSP_REPORT_ONLY_POLICY",
+    default=("" if DEBUG else _DEFAULT_CSP_REPORT_ONLY_POLICY),
+).strip()
 
 # When behind Caddy, Django should respect forwarded proto for secure cookies.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

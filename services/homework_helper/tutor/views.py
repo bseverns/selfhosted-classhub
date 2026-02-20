@@ -631,6 +631,7 @@ def chat(request):
         limit=actor_limit,
         window_seconds=60,
         cache_backend=cache,
+        request_id=request_id,
     ):
         _log_chat_event("warning", "rate_limited_actor", request_id=request_id, actor_type=actor_type, ip=client_ip)
         return _json_response({"error": "rate_limited"}, status=429, request_id=request_id)
@@ -639,6 +640,7 @@ def chat(request):
         limit=ip_limit,
         window_seconds=60,
         cache_backend=cache,
+        request_id=request_id,
     ):
         _log_chat_event("warning", "rate_limited_ip", request_id=request_id, actor_type=actor_type, ip=client_ip)
         return _json_response({"error": "rate_limited"}, status=429, request_id=request_id)

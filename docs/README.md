@@ -23,6 +23,7 @@ If you are not a developer, start with `docs/NON_DEVELOPER_GUIDE.md`.
 ### Operations
 - `docs/DAY1_DEPLOY_CHECKLIST.md`: first production deployment.
 - `docs/RUNBOOK.md`: routine maintenance and commands.
+- `docs/RELEASING.md`: release archive packaging + verification.
 - `docs/TROUBLESHOOTING.md`: symptom-first incident recovery.
 - `docs/DISASTER_RECOVERY.md`: restore/rebuild flow.
 - `docs/SECURITY.md`: security and privacy controls.

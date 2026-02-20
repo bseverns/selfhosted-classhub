@@ -6,6 +6,37 @@ on:
     branches: [main]
 
 jobs:
+  release-artifact-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build release zip
+        run: bash scripts/make_release_zip.sh /tmp/classhub_release_ci.zip
+      - name: Validate release zip excludes runtime/local artifacts
+        run: |
+          python3 - <<'PY'
+          from pathlib import PurePosixPath
+          from zipfile import ZipFile
+
+          zip_path = "/tmp/classhub_release_ci.zip"
+          blocked_parts = {".git", ".venv", "__pycache__", "media", "staticfiles"}
+
+          offenders = []
+          with ZipFile(zip_path) as zf:
+            for name in zf.namelist():
+              parts = PurePosixPath(name).parts
+              if any(part in blocked_parts for part in parts):
+                offenders.append(name)
+
+          if offenders:
+            print("Forbidden paths found in release artifact:")
+            for row in offenders:
+              print(f"- {row}")
+            raise SystemExit(1)
+
+          print("Release artifact check passed.")
+          PY
+
   classhub-tests:
     runs-on: ubuntu-latest
     steps:

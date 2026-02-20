@@ -165,8 +165,14 @@ def join_class(request):
         trust_proxy_headers=getattr(settings, "REQUEST_SAFETY_TRUST_PROXY_HEADERS", False),
         xff_index=getattr(settings, "REQUEST_SAFETY_XFF_INDEX", 0),
     )
+    request_id = (request.META.get("HTTP_X_REQUEST_ID", "") or "").strip()
     join_limit = int(getattr(settings, "JOIN_RATE_LIMIT_PER_MINUTE", 20))
-    if not fixed_window_allow(f"join:ip:{client_ip}:m", limit=join_limit, window_seconds=60):
+    if not fixed_window_allow(
+        f"join:ip:{client_ip}:m",
+        limit=join_limit,
+        window_seconds=60,
+        request_id=request_id,
+    ):
         return JsonResponse({"error": "rate_limited"}, status=429)
 
     code = (payload.get("class_code") or "").strip().upper()
