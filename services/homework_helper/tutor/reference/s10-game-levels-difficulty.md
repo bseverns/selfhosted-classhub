@@ -18,15 +18,20 @@
 - Reboot once if frozen.
 - Check Downloads and try again.
 - Use the help form to upload your `.sb3` or a screenshot.
-- Ask for help:** (link to LMS help form)
+- Ask for help: (link to LMS help form)
+
+## Common stuck issues (symptom -> check -> retest)
+- Symptom: Level never increases. Check: verify threshold condition uses current score or timer variable and updates `level`. Retest: trigger threshold once and confirm level changes.
+- Symptom: Difficulty spike is too harsh. Check: change one tuning value only (speed, spawn, or obstacle count) by a small step. Retest: play one round and compare fairness.
+- Symptom: Instructions are ignored. Check: keep controls + goal text to one short line each on start. Retest: ask a peer to explain rules after one read.
 
 ## Extend
 - Add an ‘easy mode’ toggle.
 - Add a ‘practice mode’ with no hazards.
-- Purpose:** Introduce pacing and tuning: games are systems that evolve.
+- Purpose: introduce pacing and tuning, games are systems that evolve.
 - Common snags:
-- Difficulty jumps too sharply—smooth with smaller increments.
-- Instructions too long—keep short.
+  - Difficulty jumps too sharply, smooth with smaller increments.
+  - Instructions too long, keep short.
 
 ## Scratch-only reminder
-- Provide Scratch block steps only. Do not answer in text languages like Pascal/Python/Java.
+- For Scratch questions, provide Scratch block steps only. Do not answer in text languages like Pascal/Python/Java.

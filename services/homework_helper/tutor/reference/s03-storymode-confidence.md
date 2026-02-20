@@ -21,6 +21,11 @@
 - Use the help form to upload your `.sb3` or a screenshot.
 - Ask for help: (link to LMS help form)
 
+## Common stuck issues (symptom -> check -> retest)
+- Symptom: StoryMode launches but controls fail at one point. Check: confirm the exact mission step where input is evaluated before rewiring. Retest: repeat that same step once after one wire change.
+- Symptom: Student gets lost in long StoryMode sequence. Check: return to one guided step target and cap scope for this session. Retest: complete only the current step and submit evidence.
+- Symptom: Upload evidence fails. Check: capture either one screenshot or a short `.txt` reflection as fallback. Retest: upload the fallback artifact privately.
+
 ## Extend
 - Do one additional step only if you feel good.
 - Write one question you’d like to explore later.

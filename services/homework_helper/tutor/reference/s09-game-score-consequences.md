@@ -18,15 +18,20 @@
 - Reboot once if frozen.
 - Check Downloads and try again.
 - Use the help form to upload your `.sb3` or a screenshot.
-- Ask for help:** (link to LMS help form)
+- Ask for help: (link to LMS help form)
+
+## Common stuck issues (symptom -> check -> retest)
+- Symptom: Score increases too fast. Check: ensure score changes once per valid collect event (not every frame). Retest: collect one item and confirm +1 only.
+- Symptom: `game_over` never appears. Check: confirm hazard touch condition broadcasts the exact `game_over` message name. Retest: force one hazard touch and observe result.
+- Symptom: Game does not reset cleanly after lose. Check: set initial values (`score`, position, visibility) on green flag. Retest: run two full rounds.
 
 ## Extend
 - Add a timer variable.
 - Add a win condition at score 10.
-- Purpose:** Teach state, feedback, and clean endings.
+- Purpose: teach state, feedback, and clean endings.
 - Common snags:
-- Score updates too often (multiple hits) — add cooldown.
-- Broadcast handlers missing.
+  - Score updates too often (multiple hits), add cooldown.
+  - Broadcast handlers missing.
 
 ## Scratch-only reminder
-- Provide Scratch block steps only. Do not answer in text languages like Pascal/Python/Java.
+- For Scratch questions, provide Scratch block steps only. Do not answer in text languages like Pascal/Python/Java.

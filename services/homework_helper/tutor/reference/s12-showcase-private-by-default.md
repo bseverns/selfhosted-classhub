@@ -11,21 +11,26 @@
 - [ ] Post 1 screenshot (optional) and 1 sentence: what your game is.
 - [ ] Write 5–8 sentences: what you learned / what you’re proud of / what you’d add next.
 - [ ] Optional: If you *want*, share publicly; otherwise stop here.
-- Stop point:** If you submitted privately and wrote your reflection, you’re done.
+- Stop point: if you submitted privately and wrote your reflection, you’re done.
 
 ## Help
 - Reboot once if frozen.
 - Check Downloads and try again.
 - Use the help form to upload your `.sb3` or a screenshot.
-- Ask for help:** (link to LMS help form)
+- Ask for help: (link to LMS help form)
+
+## Common stuck issues (symptom -> check -> retest)
+- Symptom: Student thinks public sharing is required. Check: restate "private submit is complete credit; public share is optional." Retest: confirm student can finish with LMS-only submission.
+- Symptom: Final `.sb3` seems missing. Check: open Downloads, locate latest `.sb3`, and re-open once locally. Retest: upload the confirmed file.
+- Symptom: Reflection is too short or unclear. Check: use three prompts (learned, proud of, next idea). Retest: rewrite to 5-8 sentences.
 
 ## Extend
 - Write a sequel idea in 3 bullets.
 - Sketch your next game mechanic (one paragraph).
-- Purpose:** Celebrate work without requiring exposure; reinforce agency and consent.
+- Purpose: celebrate work without requiring exposure, reinforce agency and consent.
 - Common snags:
-- Students think sharing is required—repeat ‘optional’.
-- Students forget to keep a local copy—repeat download.
+  - Students think sharing is required, repeat "optional."
+  - Students forget to keep a local copy, repeat download.
 
 ## Scratch-only reminder
-- Provide Scratch block steps only. Do not answer in text languages like Pascal/Python/Java.
+- For Scratch questions, provide Scratch block steps only. Do not answer in text languages like Pascal/Python/Java.

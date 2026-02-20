@@ -21,6 +21,11 @@
 - Use the help form to upload your `.sb3` or a screenshot.
 - Ask for help: (link to LMS help form)
 
+## Common stuck issues (symptom -> check -> retest)
+- Symptom: Piper app will not open. Check: confirm the desktop finished loading and double-click only once, then wait. Retest: close and relaunch Piper after 10 seconds.
+- Symptom: Mouse or keyboard does not respond. Check: reseat USB connection and confirm device lights/activity if available. Retest: move the cursor and type one key in a safe text field.
+- Symptom: Student powers off without safe shutdown. Check: show the shutdown flow from the desktop menu before unplugging. Retest: power on again and confirm normal boot.
+
 ## Extend
 - Create a folder called `ScratchProjects/` on the desktop or Documents.
 - Practice reopening an app you closed.

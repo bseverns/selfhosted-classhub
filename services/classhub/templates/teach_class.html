@@ -188,6 +188,59 @@
         text-transform: none;
         letter-spacing: normal;
       }
+      .section-toggle {
+        margin: 0;
+      }
+      .section-toggle > summary {
+        cursor: pointer;
+        list-style: none;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 2px;
+      }
+      .section-toggle > summary::-webkit-details-marker {
+        display: none;
+      }
+      .section-title {
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: #163b50;
+      }
+      .section-subtitle {
+        color: #496a7b;
+        font-size: 13px;
+      }
+      .section-body {
+        margin-top: 12px;
+      }
+      .helper-tune {
+        margin-top: 10px;
+        border: 1px solid rgba(22, 59, 80, 0.12);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.5);
+        padding: 10px;
+      }
+      .helper-tune summary {
+        cursor: pointer;
+        font-weight: 700;
+        color: #1b4258;
+      }
+      .helper-tune .hint {
+        margin: 6px 0 8px 0;
+      }
+      .helper-grid {
+        display: grid;
+        gap: 8px;
+      }
+      .helper-grid textarea {
+        min-height: 70px;
+      }
+      .helper-grid button {
+        width: fit-content;
+      }
+      .helper-defaults {
+        margin-top: 8px;
+      }
     </style>
   </head>
   <body class="glass-theme teacher-comfort">
@@ -230,84 +283,87 @@
           {% if error %}
             <p class="error" style="margin:0 0 12px 0;">{{ error }}</p>
           {% endif %}
+          <details class="section-toggle">
+            <summary>
+              <span class="section-title">Roster</span>
+              <span class="section-subtitle">Rename students quickly. Reset roster between drop-in cohorts.</span>
+            </summary>
+            <div class="section-body">
+              {% if students %}
+                <div class="roster-table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th scope="col">Student</th>
+                        <th scope="col">Return code</th>
+                        <th scope="col">Submissions</th>
+                        <th scope="col"><span class="visually-hidden">Actions</span></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for st in students %}
+                        <tr>
+                          <td><strong>{{ st.display_name }}</strong></td>
+                          <td>
+                            <span class="pill">{{ st.return_code }}</span>
+                            <button type="button" class="inline-copy" data-copy-value="{{ st.return_code }}">Copy</button>
+                          </td>
+                          <td class="muted mini">{{ submission_counts_by_student|get_item:st.id|default:0 }}</td>
+                          <td>
+                            <form method="post" action="/teach/class/{{ classroom.id }}/rename-student" class="rename-row">
+                              {% csrf_token %}
+                              <input type="hidden" name="student_id" value="{{ st.id }}" />
+                              <input name="display_name" value="{{ st.display_name }}" maxlength="80" />
+                              <button type="submit">Rename</button>
+                            </form>
+                          </td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              {% else %}
+                <p class="muted" style="margin-top:12px">No students in roster yet.</p>
+              {% endif %}
 
-          <div class="row">
-            <h2 style="margin:0">Roster</h2>
-            <div class="muted">Rename students quickly. Reset roster between drop-in cohorts.</div>
-          </div>
-
-          {% if students %}
-            <div class="roster-table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th scope="col">Student</th>
-                    <th scope="col">Return code</th>
-                    <th scope="col">Submissions</th>
-                    <th scope="col"><span class="visually-hidden">Actions</span></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for st in students %}
-                    <tr>
-                      <td><strong>{{ st.display_name }}</strong></td>
-                      <td>
-                        <span class="pill">{{ st.return_code }}</span>
-                        <button type="button" class="inline-copy" data-copy-value="{{ st.return_code }}">Copy</button>
-                      </td>
-                      <td class="muted mini">{{ submission_counts_by_student|get_item:st.id|default:0 }}</td>
-                      <td>
-                        <form method="post" action="/teach/class/{{ classroom.id }}/rename-student" class="rename-row">
-                          {% csrf_token %}
-                          <input type="hidden" name="student_id" value="{{ st.id }}" />
-                          <input name="display_name" value="{{ st.display_name }}" maxlength="80" />
-                          <button type="submit">Rename</button>
-                        </form>
-                      </td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
+              <div class="danger-zone">
+                <strong>Reset roster</strong>
+                <p class="muted mini" style="margin:6px 0 0 0;">
+                  This removes all students in this class and deletes their submissions. Active student sessions are invalidated immediately.
+                </p>
+                <form method="post" action="/teach/class/{{ classroom.id }}/reset-roster" onsubmit="return confirm('Reset roster for this class? This deletes students and submissions.');">
+                  {% csrf_token %}
+                  <label style="display:flex; align-items:center; gap:8px; margin-top:0;">
+                    <input type="checkbox" name="rotate_code" value="1" checked style="width:auto; margin:0;" />
+                    Rotate class join code after reset
+                  </label>
+                  <button type="submit">Reset roster now</button>
+                </form>
+              </div>
             </div>
-          {% else %}
-            <p class="muted" style="margin-top:12px">No students in roster yet.</p>
-          {% endif %}
-
-          <div class="danger-zone">
-            <strong>Reset roster</strong>
-            <p class="muted mini" style="margin:6px 0 0 0;">
-              This removes all students in this class and deletes their submissions. Active student sessions are invalidated immediately.
-            </p>
-            <form method="post" action="/teach/class/{{ classroom.id }}/reset-roster" onsubmit="return confirm('Reset roster for this class? This deletes students and submissions.');">
-              {% csrf_token %}
-              <label style="display:flex; align-items:center; gap:8px; margin-top:0;">
-                <input type="checkbox" name="rotate_code" value="1" checked style="width:auto; margin:0;" />
-                Rotate class join code after reset
-              </label>
-              <button type="submit">Reset roster now</button>
-            </form>
-          </div>
+          </details>
         </div>
 
         <div class="card">
-          <div class="row">
-            <h2 style="margin:0">Lesson Tracker</h2>
-            <div class="muted">Course/lesson links with submission coverage</div>
-          </div>
-
-          {% if lesson_rows %}
-            <div class="lesson-table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th scope="col">Module</th>
-                    <th scope="col">Lesson</th>
-                    <th scope="col">Dropboxes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for row in lesson_rows %}
-                    <tr class="lesson-row">
+          <details class="section-toggle">
+            <summary>
+              <span class="section-title">Lesson Tracker</span>
+              <span class="section-subtitle">Course/lesson links with submission coverage</span>
+            </summary>
+            <div class="section-body">
+              {% if lesson_rows %}
+                <div class="lesson-table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th scope="col">Module</th>
+                        <th scope="col">Lesson</th>
+                        <th scope="col">Dropboxes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for row in lesson_rows %}
+                        <tr class="lesson-row">
                       <td class="module-cell"><strong>{{ row.module.title }}</strong></td>
                       <td class="lesson-cell">
                         <strong><a href="{{ row.lesson_url }}" target="_blank" rel="noopener">{{ row.lesson_title }}</a></strong>
@@ -380,6 +436,68 @@
                                 <button type="submit">Reset default</button>
                               </form>
                             </div>
+                            <details class="helper-tune">
+                              <summary>
+                                Helper tuning
+                                {% if row.helper_tuning.has_override %}
+                                  <span class="muted mini">· Custom scope active</span>
+                                {% else %}
+                                  <span class="muted mini">· Using lesson defaults</span>
+                                {% endif %}
+                              </summary>
+                              <p class="muted mini hint">
+                                Leave fields blank to use lesson defaults for this class.
+                              </p>
+                              <form method="post" action="/teach/lessons/release" class="helper-grid">
+                                {% csrf_token %}
+                                <input type="hidden" name="class_id" value="{{ classroom.id }}" />
+                                <input type="hidden" name="course_slug" value="{{ row.course_slug }}" />
+                                <input type="hidden" name="lesson_slug" value="{{ row.lesson_slug }}" />
+                                <input type="hidden" name="action" value="set_helper_scope" />
+                                <input type="hidden" name="return_to" value="/teach/class/{{ classroom.id }}" />
+
+                                <label for="helper-context-{{ forloop.counter0 }}">Helper context</label>
+                                <input
+                                  id="helper-context-{{ forloop.counter0 }}"
+                                  name="helper_context_override"
+                                  value="{{ row.helper_tuning.context_value }}"
+                                  maxlength="200"
+                                  placeholder="{{ row.helper_tuning.default_context }}"
+                                />
+
+                                <label for="helper-topics-{{ forloop.counter0 }}">Focus topics (one per line)</label>
+                                <textarea
+                                  id="helper-topics-{{ forloop.counter0 }}"
+                                  name="helper_topics_override"
+                                >{{ row.helper_tuning.topics_value }}</textarea>
+
+                                <label for="helper-allowed-{{ forloop.counter0 }}">Allowed topics gate (one per line)</label>
+                                <textarea
+                                  id="helper-allowed-{{ forloop.counter0 }}"
+                                  name="helper_allowed_topics_override"
+                                >{{ row.helper_tuning.allowed_topics_value }}</textarea>
+
+                                <label for="helper-reference-{{ forloop.counter0 }}">Reference key</label>
+                                <input
+                                  id="helper-reference-{{ forloop.counter0 }}"
+                                  name="helper_reference_override"
+                                  value="{{ row.helper_tuning.reference_value }}"
+                                  maxlength="200"
+                                  placeholder="{{ row.helper_tuning.default_reference }}"
+                                />
+                                <button type="submit">Save helper tuning</button>
+                              </form>
+                              <div class="helper-defaults muted mini">
+                                Defaults:
+                                context <strong>{{ row.helper_tuning.default_context }}</strong>
+                                {% if row.helper_tuning.default_topics %}
+                                  · topics {{ row.helper_tuning.default_topics|join:", " }}
+                                {% endif %}
+                                {% if row.helper_tuning.default_allowed_topics %}
+                                  · allowed {{ row.helper_tuning.default_allowed_topics|join:", " }}
+                                {% endif %}
+                              </div>
+                            </details>
                           {% endwith %}
                         </div>
                       </td>
@@ -400,87 +518,92 @@
                           <span class="muted mini">No upload dropbox in this module.</span>
                         {% endif %}
                       </td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              {% else %}
+                <p class="muted" style="margin-top:12px">No course lesson links detected in this class yet.</p>
+              {% endif %}
             </div>
-          {% else %}
-            <p class="muted" style="margin-top:12px">No course lesson links detected in this class yet.</p>
-          {% endif %}
+          </details>
         </div>
 
         <div class="card">
-          <div class="row">
-            <h2 style="margin:0">Module Editor</h2>
-            <div class="muted">Order matters. Keep it predictable.</div>
-          </div>
+          <details class="section-toggle">
+            <summary>
+              <span class="section-title">Module Editor</span>
+              <span class="section-subtitle">Order matters. Keep it predictable.</span>
+            </summary>
+            <div class="section-body">
+              <div style="max-width:520px">
+                <form method="post" action="/teach/class/{{ classroom.id }}/add-module">
+                  {% csrf_token %}
+                  <label for="module-title">New module title</label>
+                  <input id="module-title" name="title" placeholder="e.g., Session 5 — Scratch Motion + Loops" />
+                  <button type="submit" style="margin-top:10px">Add module</button>
+                </form>
+              </div>
 
-          <div style="margin-top:12px; max-width:520px">
-            <form method="post" action="/teach/class/{{ classroom.id }}/add-module">
-              {% csrf_token %}
-              <label for="module-title">New module title</label>
-              <input id="module-title" name="title" placeholder="e.g., Session 5 — Scratch Motion + Loops" />
-              <button type="submit" style="margin-top:10px">Add module</button>
-            </form>
-          </div>
+              {% if modules %}
+                {% for m in modules %}
+                  <div class="module">
+                    <div class="row">
+                      <div>
+                        <strong>{{ m.title }}</strong>
+                        <div class="muted mini">{{ m.materials.all|length }} materials</div>
+                      </div>
+                      <div class="btnline">
+                        <form method="post" action="/teach/class/{{ classroom.id }}/move-module">
+                          {% csrf_token %}
+                          <input type="hidden" name="module_id" value="{{ m.id }}" />
+                          <input type="hidden" name="direction" value="up" />
+                          <button type="submit" aria-label="Move module {{ m.title }} up">↑</button>
+                        </form>
+                        <form method="post" action="/teach/class/{{ classroom.id }}/move-module">
+                          {% csrf_token %}
+                          <input type="hidden" name="module_id" value="{{ m.id }}" />
+                          <input type="hidden" name="direction" value="down" />
+                          <button type="submit" aria-label="Move module {{ m.title }} down">↓</button>
+                        </form>
+                        <a href="/teach/module/{{ m.id }}">Open</a>
+                      </div>
+                    </div>
 
-          {% if modules %}
-            {% for m in modules %}
-              <div class="module">
-                <div class="row">
-                  <div>
-                    <strong>{{ m.title }}</strong>
-                    <div class="muted mini">{{ m.materials.all|length }} materials</div>
-                  </div>
-                  <div class="btnline">
-                    <form method="post" action="/teach/class/{{ classroom.id }}/move-module">
-                      {% csrf_token %}
-                      <input type="hidden" name="module_id" value="{{ m.id }}" />
-                      <input type="hidden" name="direction" value="up" />
-                      <button type="submit" aria-label="Move module {{ m.title }} up">↑</button>
-                    </form>
-                    <form method="post" action="/teach/class/{{ classroom.id }}/move-module">
-                      {% csrf_token %}
-                      <input type="hidden" name="module_id" value="{{ m.id }}" />
-                      <input type="hidden" name="direction" value="down" />
-                      <button type="submit" aria-label="Move module {{ m.title }} down">↓</button>
-                    </form>
-                    <a href="/teach/module/{{ m.id }}">Open</a>
-                  </div>
-                </div>
-
-                {% if m.materials.all %}
-                  {% for mat in m.materials.all %}
-                    <div class="mat">
-                      <div class="row">
-                        <div>
-                          <strong>{{ mat.title }}</strong>
-                          <div class="muted mini">Type: {{ mat.type }}</div>
-                        </div>
-                        <div class="muted mini">
-                          {% if mat.type == 'upload' %}
-                            Submitted: {{ submission_counts|get_item:mat.id|default:0 }} / {{ student_count }} · <a href="/teach/material/{{ mat.id }}/submissions">Submissions</a>
+                    {% if m.materials.all %}
+                      {% for mat in m.materials.all %}
+                        <div class="mat">
+                          <div class="row">
+                            <div>
+                              <strong>{{ mat.title }}</strong>
+                              <div class="muted mini">Type: {{ mat.type }}</div>
+                            </div>
+                            <div class="muted mini">
+                              {% if mat.type == 'upload' %}
+                                Submitted: {{ submission_counts|get_item:mat.id|default:0 }} / {{ student_count }} · <a href="/teach/material/{{ mat.id }}/submissions">Submissions</a>
+                              {% endif %}
+                            </div>
+                          </div>
+                          {% if mat.type == 'link' and mat.url %}
+                            <div class="muted mini"><a href="{{ mat.url }}" target="_blank" rel="noopener">Open link</a></div>
+                          {% elif mat.type == 'text' and mat.body %}
+                            <pre style="margin-top:8px;">{{ mat.body|truncatechars:280 }}</pre>
+                          {% elif mat.type == 'upload' %}
+                            <div class="muted mini">Accepted: {{ mat.accepted_extensions|default:'.sb3' }} · Max {{ mat.max_upload_mb }}MB</div>
                           {% endif %}
                         </div>
-                      </div>
-                      {% if mat.type == 'link' and mat.url %}
-                        <div class="muted mini"><a href="{{ mat.url }}" target="_blank" rel="noopener">Open link</a></div>
-                      {% elif mat.type == 'text' and mat.body %}
-                        <pre style="margin-top:8px;">{{ mat.body|truncatechars:280 }}</pre>
-                      {% elif mat.type == 'upload' %}
-                        <div class="muted mini">Accepted: {{ mat.accepted_extensions|default:'.sb3' }} · Max {{ mat.max_upload_mb }}MB</div>
-                      {% endif %}
-                    </div>
-                  {% endfor %}
-                {% else %}
-                  <div class="muted mini" style="margin-top:10px">No materials yet.</div>
-                {% endif %}
-              </div>
-            {% endfor %}
-          {% else %}
-            <p class="muted" style="margin-top:12px">No modules yet.</p>
-          {% endif %}
+                      {% endfor %}
+                    {% else %}
+                      <div class="muted mini" style="margin-top:10px">No materials yet.</div>
+                    {% endif %}
+                  </div>
+                {% endfor %}
+              {% else %}
+                <p class="muted" style="margin-top:12px">No modules yet.</p>
+              {% endif %}
+            </div>
+          </details>
         </div>
       </main>
     </div>

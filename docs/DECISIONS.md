@@ -196,8 +196,10 @@ Historical implementation logs and superseded decisions are archived by month in
 
 **Current decision:**
 - Piper course helper references include explicit hardware troubleshooting context (breadboard/jumper/shared-ground/input-path checks), not only Scratch workflow guidance.
+- Per-lesson helper references include "Common stuck issues (symptom -> check -> retest)" snippets for deterministic coaching before open-ended hinting.
 - Early StoryMode lessons include hardware phrases in `helper_allowed_topics` so strict topic filtering still permits Piper control/wiring questions.
 - Helper chat uses a deterministic Piper hardware triage branch for wiring-style questions (clarify mission/step, one targeted check, retest request) before model generation.
+- Helper widget includes context-aware quick-action prompts (Piper vs Scratch vs general) that one-tap send structured help requests.
 - `scripts/eval_helper.py` supports lightweight rule-based scoring (including Piper hardware cases) so response regressions are easier to spot in CI/local checks.
 
 **Why this remains active:**
@@ -239,3 +241,24 @@ Historical implementation logs and superseded decisions are archived by month in
 **Why this remains active:**
 - Reduces repeated disk + YAML/markdown parsing overhead on hot lesson/class pages.
 - Keeps behavior deterministic for live content edits without requiring manual cache flushes.
+
+## Teacher lesson-level helper tuning
+
+**Current decision:**
+- Reuse `LessonRelease` as the per-class/per-lesson storage point for teacher helper-scope overrides.
+- Teachers can set optional overrides for helper context, focus topics, allowed-topic gate, and reference key directly from each lesson row in `/teach/class/<id>`.
+- Class Hub applies these overrides when issuing signed helper scope tokens for students in that class.
+
+**Why this remains active:**
+- Keeps helper tuning close to lesson release controls where teachers already manage pacing.
+- Avoids introducing a second override model/table for the same class+lesson keyspace.
+
+## Collapsed teacher course controls by default
+
+**Current decision:**
+- On the teacher class dashboard, `Roster`, `Lesson Tracker`, and `Module Editor` are collapsed by default using explicit section toggles.
+- Content is shown only when the teacher opens a section.
+
+**Why this remains active:**
+- Reduces visual load in day-to-day teaching workflows while preserving full control paths.
+- Makes the class dashboard easier to scan during live instruction.

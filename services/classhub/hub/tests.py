@@ -16,6 +16,8 @@ from django_otp.oath import totp
 from django_otp.plugins.otp_totp.models import TOTPDevice
 from django.utils import timezone
 
+from common.helper_scope import parse_scope_token
+
 from .models import AuditEvent, Class, LessonRelease, Material, Module, StudentEvent, StudentIdentity, Submission
 from .services.upload_scan import ScanResult
 
@@ -516,6 +518,62 @@ class LessonReleaseTests(TestCase):
         )
         self.assertEqual(row.available_on, target_date)
         self.assertFalse(row.force_locked)
+
+    def test_teacher_can_set_helper_scope_from_interface(self):
+        self.client.force_login(self.staff)
+
+        resp = self.client.post(
+            "/teach/lessons/release",
+            {
+                "class_id": str(self.classroom.id),
+                "course_slug": "piper_scratch_12_session",
+                "lesson_slug": "s01-welcome-private-workflow",
+                "action": "set_helper_scope",
+                "helper_context_override": "Piper wiring mentor",
+                "helper_topics_override": "Breadboard checks\nRetest loop",
+                "helper_allowed_topics_override": "Piper circuits\nStoryMode controls",
+                "helper_reference_override": "piper-hardware",
+                "return_to": f"/teach/class/{self.classroom.id}",
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+
+        row = LessonRelease.objects.get(
+            classroom=self.classroom,
+            course_slug="piper_scratch_12_session",
+            lesson_slug="s01-welcome-private-workflow",
+        )
+        self.assertEqual(row.helper_context_override, "Piper wiring mentor")
+        self.assertEqual(row.helper_topics_override, "Breadboard checks\nRetest loop")
+        self.assertEqual(row.helper_allowed_topics_override, "Piper circuits\nStoryMode controls")
+        self.assertEqual(row.helper_reference_override, "piper-hardware")
+
+    def test_student_helper_scope_uses_class_override(self):
+        LessonRelease.objects.create(
+            classroom=self.classroom,
+            course_slug="piper_scratch_12_session",
+            lesson_slug="s01-welcome-private-workflow",
+            helper_context_override="Piper wiring mentor",
+            helper_topics_override="Breadboard checks\nRetest loop",
+            helper_allowed_topics_override="Piper circuits\nStoryMode controls",
+            helper_reference_override="piper-hardware",
+        )
+        self._login_student()
+
+        resp = self.client.get("/course/piper_scratch_12_session/s01-welcome-private-workflow")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'data-helper-context="Piper wiring mentor"')
+        self.assertContains(resp, 'data-helper-topics="Breadboard checks | Retest loop"')
+        self.assertContains(resp, 'data-helper-reference="piper-hardware"')
+
+        body = resp.content.decode("utf-8")
+        token_match = re.search(r'data-helper-scope-token="([^"]+)"', body)
+        self.assertIsNotNone(token_match)
+        scope = parse_scope_token(token_match.group(1), max_age_seconds=3600)
+        self.assertEqual(scope["context"], "Piper wiring mentor")
+        self.assertEqual(scope["topics"], ["Breadboard checks", "Retest loop"])
+        self.assertEqual(scope["allowed_topics"], ["Piper circuits", "StoryMode controls"])
+        self.assertEqual(scope["reference"], "piper-hardware")
 
     def test_student_lesson_is_intro_only_before_release(self):
         LessonRelease.objects.create(

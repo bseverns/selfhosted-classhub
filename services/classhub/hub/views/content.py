@@ -21,7 +21,7 @@ from ..services.markdown_content import (
     render_markdown_to_safe_html,
     split_lesson_markdown_for_audiences,
 )
-from ..services.release_state import lesson_release_state
+from ..services.release_state import lesson_release_override_map, lesson_release_state
 from ..services.upload_policy import front_matter_submission
 
 
@@ -128,6 +128,17 @@ def _build_allowed_topics(front_matter: dict) -> list[str]:
     return []
 
 
+def _split_helper_topics_text(raw: str) -> list[str]:
+    parts: list[str] = []
+    normalized = (raw or "").replace("\r\n", "\n").replace("\r", "\n")
+    for line in normalized.split("\n"):
+        for segment in line.split("|"):
+            token = segment.strip()
+            if token:
+                parts.append(token)
+    return parts
+
+
 def _normalize_stored_lesson_videos(course_slug: str, lesson_slug: str) -> list[dict]:
     try:
         rows = list(
@@ -195,6 +206,8 @@ def course_lesson(request, course_slug: str, lesson_slug: str):
 
     learner_body_md, _teacher_body_md = split_lesson_markdown_for_audiences(body_md)
     classroom_id = getattr(getattr(request, "classroom", None), "id", 0) or 0
+    release_override_map = lesson_release_override_map(classroom_id) if classroom_id else {}
+    release_override = release_override_map.get((course_slug, lesson_slug))
     release_state = lesson_release_state(
         request,
         fm,
@@ -202,6 +215,7 @@ def course_lesson(request, course_slug: str, lesson_slug: str):
         classroom_id=classroom_id,
         course_slug=course_slug,
         lesson_slug=lesson_slug,
+        override_map=release_override_map,
     )
     lesson_locked = bool(release_state.get("is_locked"))
     lesson_available_on = release_state.get("available_on")
@@ -250,6 +264,20 @@ def course_lesson(request, course_slug: str, lesson_slug: str):
                 }
 
     helper_reference = lesson_meta.get("helper_reference") or manifest.get("helper_reference") or ""
+    if release_override:
+        helper_context_override = (release_override.helper_context_override or "").strip()
+        helper_topics_override = _split_helper_topics_text(release_override.helper_topics_override)
+        helper_allowed_topics_override = _split_helper_topics_text(release_override.helper_allowed_topics_override)
+        helper_reference_override = (release_override.helper_reference_override or "").strip()
+        if helper_context_override:
+            helper_context = helper_context_override
+        if helper_topics_override:
+            helper_topics = helper_topics_override
+        if helper_allowed_topics_override:
+            helper_allowed_topics = helper_allowed_topics_override
+        if helper_reference_override:
+            helper_reference = helper_reference_override
+
     helper_scope_token = issue_scope_token(
         context=helper_context,
         topics=helper_topics,

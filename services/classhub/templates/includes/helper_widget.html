@@ -1,9 +1,16 @@
 <div
   class="helper-widget"
   data-helper-scope-token="{{ helper_scope_token|default:'' }}"
+  data-helper-reference="{{ helper_reference|default:'' }}"
+  data-helper-context="{{ helper_context|default:'' }}"
+  data-helper-topics="{{ helper_topics|default:'' }}"
 >
   <h2 style="margin:0; font-size:1.25rem;">{{ helper_title|default:"Homework Helper" }}</h2>
   <p class="helper-description">{{ helper_description|default:"Ask the helper for hints, steps, or feedback." }}</p>
+  <div class="helper-quick-wrap">
+    <div class="helper-quick-title">Quick asks (tap to send):</div>
+    <div class="helper-quick-actions" role="group" aria-label="Quick helper prompts"></div>
+  </div>
 
   <label class="visually-hidden helper-label" for="helper-input-0">Question for helper</label>
   <textarea id="helper-input-0" class="helper-input" placeholder="Ask for help…"></textarea>
@@ -39,7 +46,7 @@
     border-color: var(--focus, #0f7c8b);
     box-shadow: 0 0 0 3px rgba(15, 124, 139, 0.16);
   }
-  .helper-widget button {
+  .helper-widget .helper-submit {
     margin-top: 10px;
     padding: 10px 14px;
     font-size: 14px;
@@ -50,10 +57,10 @@
     color: var(--cta-ink, #eef7fb);
     cursor: pointer;
   }
-  .helper-widget button:hover {
+  .helper-widget .helper-submit:hover {
     filter: brightness(1.04);
   }
-  .helper-widget button:disabled {
+  .helper-widget .helper-submit:disabled {
     cursor: wait;
     filter: grayscale(0.25);
     opacity: 0.86;
@@ -73,6 +80,45 @@
     font-size: 14px;
     margin-top: 4px;
     margin-bottom: 12px;
+  }
+  .helper-quick-wrap {
+    margin-bottom: 12px;
+  }
+  .helper-quick-title {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--muted, #4e6f80);
+    margin-bottom: 6px;
+  }
+  .helper-quick-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .helper-widget .helper-quick-action {
+    margin-top: 0;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 999px;
+    border: 1px solid rgba(15, 52, 72, 0.24);
+    background: rgba(255, 255, 255, 0.72);
+    color: #1f455c;
+    cursor: pointer;
+  }
+  .helper-quick-action:hover {
+    background: rgba(255, 255, 255, 0.92);
+  }
+  .helper-quick-action:focus {
+    outline: none;
+    border-color: var(--focus, #0f7c8b);
+    box-shadow: 0 0 0 3px rgba(15, 124, 139, 0.16);
+  }
+  .helper-quick-action:disabled {
+    cursor: wait;
+    opacity: 0.8;
   }
   @supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
     .helper-widget {
@@ -100,28 +146,127 @@
   const csrfToken = () => getCookie("csrftoken") || "";
 
   const widgets = document.querySelectorAll(".helper-widget");
+  const QUICK_PROMPTS = {
+    piper: [
+      {
+        label: "Jump not working",
+        prompt: "In StoryMode, left/right work but jump does not work in Cheeseteroid. Help me troubleshoot one step at a time.",
+      },
+      {
+        label: "No buttons respond",
+        prompt: "None of my StoryMode breadboard buttons are responding. Give me one check at a time and ask me to retest.",
+      },
+      {
+        label: "One direction fails",
+        prompt: "Only one movement direction fails on my Piper controls. What should I compare first in my jumper wiring path?",
+      },
+      {
+        label: "Mouse-only path",
+        prompt: "I only have a mouse right now, no keyboard. What is the mouse-first path for this lesson?",
+      },
+      {
+        label: "Upload .sb3 help",
+        prompt: "I finished but cannot find my .sb3 file to upload. Walk me through check -> retest steps.",
+      },
+    ],
+    scratch: [
+      {
+        label: "Sprite won't move",
+        prompt: "My sprite does not move when I click the green flag. Please give me one Scratch block check at a time.",
+      },
+      {
+        label: "Backdrop won't change",
+        prompt: "My backdrop never changes. What is one specific Scratch block check I should do first?",
+      },
+      {
+        label: "Score not updating",
+        prompt: "My score is not updating correctly. Help me debug in small steps and retest after each change.",
+      },
+      {
+        label: "Game over missing",
+        prompt: "My game over condition does not trigger. Give me one event/broadcast check and then ask me to retest.",
+      },
+      {
+        label: "Save and upload",
+        prompt: "Please walk me through saving my Scratch project as .sb3 and uploading it privately.",
+      },
+    ],
+    general: [
+      {
+        label: "What is today's goal?",
+        prompt: "What is the goal for this lesson, and what should be done first?",
+      },
+      {
+        label: "I am stuck",
+        prompt: "I am stuck. Ask me one clarifying question, then give me one small next step.",
+      },
+      {
+        label: "How to ask better",
+        prompt: "Help me write a clear help request: what I expected, what happened, and what I already tried.",
+      },
+    ],
+  };
+
+  const hasKeyword = (text, words) => words.some((w) => text.includes(w));
+  const detectPromptGroup = (ref, context, topics) => {
+    const meta = `${ref} ${context} ${topics}`.toLowerCase();
+    if (
+      hasKeyword(meta, [
+        "piper",
+        "storymode",
+        "pipercode",
+        "mars",
+        "cheeseteroid",
+        "gpio",
+        "breadboard",
+        "jumper",
+        "wiring",
+      ])
+    ) {
+      return "piper";
+    }
+    if (hasKeyword(meta, ["scratch", "sprite", "backdrop", "animation", "game"])) {
+      return "scratch";
+    }
+    return "general";
+  };
+
   widgets.forEach((widget, idx) => {
     const label = widget.querySelector(".helper-label");
     const textarea = widget.querySelector(".helper-input");
     const button = widget.querySelector(".helper-submit");
     const output = widget.querySelector(".helper-output");
+    const quickWrap = widget.querySelector(".helper-quick-wrap");
+    const quickActions = widget.querySelector(".helper-quick-actions");
     const inputId = `helper-input-${idx}`;
     textarea.id = inputId;
     label.setAttribute("for", inputId);
     const scopeToken = (widget.dataset.helperScopeToken || "").trim();
+    const helperReference = (widget.dataset.helperReference || "").trim();
+    const helperContext = (widget.dataset.helperContext || "").trim();
+    const helperTopics = (widget.dataset.helperTopics || "").trim();
 
     const setOutput = (txt) => {
       output.textContent = txt;
     };
 
-    button.addEventListener("click", async () => {
-      const message = (textarea.value || "").trim();
+    const setQuickActionsBusy = (disabled) => {
+      if (!quickActions) return;
+      quickActions.querySelectorAll(".helper-quick-action").forEach((quickBtn) => {
+        quickBtn.disabled = disabled;
+      });
+    };
+
+    const sendMessage = async (rawMessage) => {
+      const message = (rawMessage || "").trim();
       if (!message) {
         setOutput("Type a question before asking.");
         return;
       }
+      textarea.value = message;
       button.disabled = true;
       button.setAttribute("aria-busy", "true");
+      setQuickActionsBusy(true);
       setOutput("Thinking…");
       try {
         const payload = { message };
@@ -147,7 +292,33 @@
       } finally {
         button.disabled = false;
         button.removeAttribute("aria-busy");
+        setQuickActionsBusy(false);
       }
+    };
+
+    const promptGroup = detectPromptGroup(helperReference, helperContext, helperTopics);
+    const promptSet = QUICK_PROMPTS[promptGroup] || QUICK_PROMPTS.general;
+    if (quickActions && promptSet.length) {
+      promptSet.forEach((item) => {
+        const quickBtn = document.createElement("button");
+        quickBtn.type = "button";
+        quickBtn.className = "helper-quick-action";
+        quickBtn.textContent = item.label;
+        quickBtn.addEventListener("click", () => {
+          if (button.disabled) return;
+          textarea.value = item.prompt;
+          textarea.focus();
+          textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+          sendMessage(item.prompt);
+        });
+        quickActions.appendChild(quickBtn);
+      });
+    } else if (quickWrap) {
+      quickWrap.hidden = true;
+    }
+
+    button.addEventListener("click", async () => {
+      await sendMessage(textarea.value || "");
     });
   });
 })();

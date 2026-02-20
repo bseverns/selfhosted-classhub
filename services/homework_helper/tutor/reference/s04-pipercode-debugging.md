@@ -18,15 +18,20 @@
 - Reboot once if frozen.
 - Check Downloads and try again.
 - Use the help form to upload your `.sb3` or a screenshot.
-- Ask for help:** (link to LMS help form)
+- Ask for help: (link to LMS help form)
+
+## Common stuck issues (symptom -> check -> retest)
+- Symptom: Blocks do not run. Check: verify there is a start trigger block and run button was used once. Retest: run with only 2-3 blocks first, then add more.
+- Symptom: Student cannot tell what changed. Check: name one block changed and one visible result expected. Retest: run before/after and compare one behavior.
+- Symptom: Bug report is vague. Check: include "what I expected / what happened / one screenshot." Retest: rerun steps and confirm the same bug reproduces.
 
 ## Extend
 - Break one thing on purpose and fix it.
 - Swap the order of two blocks and observe the change.
-- Purpose:** Teach that debugging is normal and describable.
+- Purpose: teach that debugging is normal and describable.
 - Common snags:
-- Students don’t know what changed.
-- Screenshots missing blocks—teach zoom/fit.
+  - Students don’t know what changed.
+  - Screenshots missing blocks, teach zoom/fit.
 
 ## Scratch-only reminder
-- Provide Scratch block steps only. Do not answer in text languages like Pascal/Python/Java.
+- For Scratch questions, provide Scratch block steps only. Do not answer in text languages like Pascal/Python/Java.

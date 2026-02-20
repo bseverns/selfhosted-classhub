@@ -48,7 +48,7 @@ from ..services.release_state import (
     lesson_release_state,
     parse_release_date,
 )
-from .content import iter_course_lesson_options
+from .content import _build_allowed_topics, _build_lesson_topics, iter_course_lesson_options
 
 
 _TEMPLATE_SLUG_RE = re.compile(r"^[a-z0-9_-]+$")
@@ -258,6 +258,7 @@ def _build_lesson_tracker_rows(request, classroom_id: int, modules: list[Module]
     teacher_material_html_by_lesson: dict[tuple[str, str], str] = {}
     lesson_title_by_lesson: dict[tuple[str, str], str] = {}
     lesson_release_by_lesson: dict[tuple[str, str], dict] = {}
+    helper_defaults_by_lesson: dict[tuple[str, str], dict] = {}
     release_override_map = lesson_release_override_map(classroom_id)
 
     for module in modules:
@@ -325,6 +326,12 @@ def _build_lesson_tracker_rows(request, classroom_id: int, modules: list[Module]
                 lesson_title_by_lesson[lesson_key] = (
                     str(front_matter.get("title") or "").strip() or mat.title
                 )
+                helper_defaults_by_lesson[lesson_key] = {
+                    "context": str(front_matter.get("title") or lesson_slug).strip() or lesson_slug,
+                    "topics": _build_lesson_topics(front_matter),
+                    "allowed_topics": _build_allowed_topics(front_matter),
+                    "reference": str(lesson_meta.get("helper_reference") or "").strip(),
+                }
                 lesson_release_by_lesson[lesson_key] = lesson_release_state(
                     request,
                     front_matter,
@@ -336,6 +343,22 @@ def _build_lesson_tracker_rows(request, classroom_id: int, modules: list[Module]
                     respect_staff_bypass=False,
                 )
 
+            release_override = release_override_map.get(lesson_key)
+            helper_context_override = (getattr(release_override, "helper_context_override", "") or "").strip()
+            helper_topics_override = (getattr(release_override, "helper_topics_override", "") or "").strip()
+            helper_allowed_topics_override = (getattr(release_override, "helper_allowed_topics_override", "") or "").strip()
+            helper_reference_override = (getattr(release_override, "helper_reference_override", "") or "").strip()
+            has_helper_override = bool(
+                helper_context_override
+                or helper_topics_override
+                or helper_allowed_topics_override
+                or helper_reference_override
+            )
+
+            helper_defaults = helper_defaults_by_lesson.get(
+                lesson_key,
+                {"context": lesson_slug, "topics": [], "allowed_topics": [], "reference": ""},
+            )
             rows.append(
                 {
                     "module": module,
@@ -348,6 +371,17 @@ def _build_lesson_tracker_rows(request, classroom_id: int, modules: list[Module]
                     "review_label": review_label,
                     "teacher_material_html": teacher_material_html_by_lesson.get(lesson_key, ""),
                     "release_state": lesson_release_by_lesson.get(lesson_key, {}),
+                    "helper_tuning": {
+                        "has_override": has_helper_override,
+                        "context_value": helper_context_override,
+                        "topics_value": helper_topics_override,
+                        "allowed_topics_value": helper_allowed_topics_override,
+                        "reference_value": helper_reference_override,
+                        "default_context": helper_defaults.get("context", ""),
+                        "default_topics": helper_defaults.get("topics", []),
+                        "default_allowed_topics": helper_defaults.get("allowed_topics", []),
+                        "default_reference": helper_defaults.get("reference", ""),
+                    },
                 }
             )
 
@@ -418,6 +452,21 @@ def _parse_positive_int(raw: str, *, min_value: int, max_value: int) -> int | No
     if parsed < min_value or parsed > max_value:
         return None
     return parsed
+
+
+def _split_helper_topics_text(raw: str) -> list[str]:
+    parts: list[str] = []
+    normalized = (raw or "").replace("\r\n", "\n").replace("\r", "\n")
+    for line in normalized.split("\n"):
+        for segment in line.split("|"):
+            token = segment.strip()
+            if token:
+                parts.append(token)
+    return parts
+
+
+def _normalize_helper_topics_text(raw: str) -> str:
+    return "\n".join(_split_helper_topics_text(raw))
 
 
 def _authoring_template_output_dir() -> Path:
@@ -1232,6 +1281,64 @@ def teach_set_lesson_release(request):
             metadata={"course_slug": course_slug, "lesson_slug": lesson_slug},
         )
         return redirect(_with_notice(return_to, notice="Lesson opened now for this class."))
+
+    if action == "set_helper_scope":
+        helper_context_override = (request.POST.get("helper_context_override") or "").strip()[:200]
+        helper_topics_override = _normalize_helper_topics_text(request.POST.get("helper_topics_override") or "")
+        helper_allowed_topics_override = _normalize_helper_topics_text(
+            request.POST.get("helper_allowed_topics_override") or ""
+        )
+        helper_reference_override = (request.POST.get("helper_reference_override") or "").strip()[:200]
+        has_helper_override = bool(
+            helper_context_override
+            or helper_topics_override
+            or helper_allowed_topics_override
+            or helper_reference_override
+        )
+
+        if release is None:
+            if not has_helper_override:
+                return redirect(_with_notice(return_to, notice="Helper tuning is using lesson defaults."))
+            release = LessonRelease(
+                classroom=classroom,
+                course_slug=course_slug,
+                lesson_slug=lesson_slug,
+            )
+
+        release.helper_context_override = helper_context_override
+        release.helper_topics_override = helper_topics_override
+        release.helper_allowed_topics_override = helper_allowed_topics_override
+        release.helper_reference_override = helper_reference_override
+
+        if (
+            not has_helper_override
+            and release.available_on is None
+            and not release.force_locked
+            and release.id is not None
+        ):
+            release.delete()
+        else:
+            release.save()
+
+        _audit(
+            request,
+            action="lesson_release.set_helper_scope",
+            classroom=classroom,
+            target_type="LessonRelease",
+            target_id=f"{course_slug}/{lesson_slug}",
+            summary="Updated lesson helper tuning",
+            metadata={
+                "course_slug": course_slug,
+                "lesson_slug": lesson_slug,
+                "helper_context_override": helper_context_override,
+                "helper_topics_override": helper_topics_override,
+                "helper_allowed_topics_override": helper_allowed_topics_override,
+                "helper_reference_override": helper_reference_override,
+            },
+        )
+        if has_helper_override:
+            return redirect(_with_notice(return_to, notice="Helper tuning saved for this lesson."))
+        return redirect(_with_notice(return_to, notice="Helper tuning reset to lesson defaults."))
 
     if action == "reset_default":
         LessonRelease.objects.filter(

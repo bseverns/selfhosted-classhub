@@ -22,6 +22,11 @@
 - Use the help form to upload your `.sb3` or a screenshot.
 - Ask for help: (link to LMS help form)
 
+## Common stuck issues (symptom -> check -> retest)
+- Symptom: Jump fails but movement still works. Check: confirm you are at the Cheeseteroid jump test moment and inspect only the jump input wire path + shared ground. Retest: press jump three times and report what changed.
+- Symptom: No physical controls respond. Check: confirm StoryMode mission is open and one known-good button path is fully seated on the breadboard. Retest: test only one input before changing more wires.
+- Symptom: File cannot be submitted. Check: open Downloads, sort by newest, and confirm the file ends in `.sb3`. Retest: re-open the file once, then upload.
+
 ## Extend
 - Create a folder called `ScratchProjects/` and move your file into it.
 - Rename your file to `..._v2` after one change.

@@ -18,15 +18,20 @@
 - Reboot once if frozen.
 - Check Downloads and try again.
 - Use the help form to upload your `.sb3` or a screenshot.
-- Ask for help:** (link to LMS help form)
+- Ask for help: (link to LMS help form)
+
+## Common stuck issues (symptom -> check -> retest)
+- Symptom: Scene shift never happens. Check: ensure one trigger event (broadcast, click, or key) connects start to shift action. Retest: activate trigger once and verify the shift moment.
+- Symptom: Sound repeats too much. Check: move sound block to one event path instead of inside a fast loop. Retest: run for 10 seconds and count repeats.
+- Symptom: Project feels chaotic. Check: define clear beginning, shift, and ending cues with one block sequence each. Retest: play once and verify all three beats.
 
 ## Extend
 - Add subtitles (text) for accessibility.
 - Add a ‘quiet mode’ toggle that disables sound.
-- Purpose:** Move from loops into authored moments and narrative beats.
+- Purpose: move from loops into authored moments and narrative beats.
 - Common snags:
-- Asset hunting spirals—provide a pack.
-- Sound triggers overwhelm—optional.
+  - Asset hunting spirals, provide a pack.
+  - Sound triggers overwhelm, keep sound optional.
 
 ## Scratch-only reminder
-- Provide Scratch block steps only. Do not answer in text languages like Pascal/Python/Java.
+- For Scratch questions, provide Scratch block steps only. Do not answer in text languages like Pascal/Python/Java.

@@ -18,15 +18,20 @@
 - Reboot once if frozen.
 - Check Downloads and try again.
 - Use the help form to upload your `.sb3` or a screenshot.
-- Ask for help:** (link to LMS help form)
+- Ask for help: (link to LMS help form)
+
+## Common stuck issues (symptom -> check -> retest)
+- Symptom: Sprite does not move. Check: make sure `move` is inside a `forever` loop under a start block. Retest: click green flag and watch for at least 3 seconds.
+- Symptom: Backdrop never changes. Check: add one explicit backdrop-change block inside the running script. Retest: run once and confirm one visible change.
+- Symptom: Loop is too fast to read. Check: add a short `wait` block (0.2-0.5 seconds). Retest: adjust once and compare smoothness.
 
 ## Extend
 - Add a second sprite that appears when the backdrop changes.
 - Add a sound only when the backdrop changes.
-- Purpose:** Introduce the stage/sprite mental model and loops.
+- Purpose: introduce the stage/sprite mental model and loops.
 - Common snags:
-- Students forget to download.
-- Loops run too fast—add waits.
+  - Students forget to download.
+  - Loops run too fast, add waits.
 
 ## Scratch-only reminder
-- Provide Scratch block steps only. Do not answer in text languages like Pascal/Python/Java.
+- For Scratch questions, provide Scratch block steps only. Do not answer in text languages like Pascal/Python/Java.

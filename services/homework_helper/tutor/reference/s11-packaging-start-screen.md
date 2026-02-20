@@ -18,15 +18,20 @@
 - Reboot once if frozen.
 - Check Downloads and try again.
 - Use the help form to upload your `.sb3` or a screenshot.
-- Ask for help:** (link to LMS help form)
+- Ask for help: (link to LMS help form)
+
+## Common stuck issues (symptom -> check -> retest)
+- Symptom: Game starts immediately and skips start screen. Check: add one start gate variable or trigger block before gameplay scripts run. Retest: restart twice and confirm gate each time.
+- Symptom: Restart breaks state. Check: reset key variables and positions on green flag or restart event. Retest: run two back-to-back playthroughs.
+- Symptom: Credits show real names. Check: replace with chosen name/nickname only. Retest: preview start screen and confirm privacy-safe text.
 
 ## Extend
 - Add sound toggle (mute/unmute).
 - Add a difficulty selector (easy/normal).
-- Purpose:** Packaging is care: make play approachable for others.
+- Purpose: packaging is care, make play approachable for others.
 - Common snags:
-- Game starts immediately—missing gate.
-- Credits reveal real names—remind pseudonyms.
+  - Game starts immediately, missing gate.
+  - Credits reveal real names, remind pseudonyms.
 
 ## Scratch-only reminder
-- Provide Scratch block steps only. Do not answer in text languages like Pascal/Python/Java.
+- For Scratch questions, provide Scratch block steps only. Do not answer in text languages like Pascal/Python/Java.

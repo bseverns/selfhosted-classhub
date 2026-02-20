@@ -18,15 +18,20 @@
 - Reboot once if frozen.
 - Check Downloads and try again.
 - Use the help form to upload your `.sb3` or a screenshot.
-- Ask for help:** (link to LMS help form)
+- Ask for help: (link to LMS help form)
+
+## Common stuck issues (symptom -> check -> retest)
+- Symptom: Animation does not play. Check: confirm script uses `next costume` inside `forever` and starts on green flag. Retest: run once and watch a full cycle.
+- Symptom: Animation is too fast or too slow. Check: change only the `wait` value by one step. Retest: compare before/after and keep the clearer timing.
+- Symptom: Student stuck editing costumes only. Check: timebox costume edits and return to script testing. Retest: run animation before adding more art detail.
 
 ## Extend
 - Animate a second sprite with a different tempo.
 - Add a backdrop change every 8 costume switches.
-- Purpose:** Teach time as a design material (pacing).
+- Purpose: teach time as a design material (pacing).
 - Common snags:
-- Animation too fast/slow.
-- Students stuck in costume editor—timebox.
+  - Animation too fast or too slow.
+  - Students stuck in costume editor, timebox.
 
 ## Scratch-only reminder
-- Provide Scratch block steps only. Do not answer in text languages like Pascal/Python/Java.
+- For Scratch questions, provide Scratch block steps only. Do not answer in text languages like Pascal/Python/Java.

@@ -334,6 +334,11 @@ class LessonRelease(models.Model):
     available_on = models.DateField(blank=True, null=True)
     # Hard lock regardless of date (until toggled off by teacher/admin).
     force_locked = models.BooleanField(default=False)
+    # Optional helper-scope overrides for this class + lesson.
+    helper_context_override = models.CharField(max_length=200, blank=True, default="")
+    helper_topics_override = models.TextField(blank=True, default="")
+    helper_allowed_topics_override = models.TextField(blank=True, default="")
+    helper_reference_override = models.CharField(max_length=200, blank=True, default="")
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
