@@ -4,6 +4,17 @@ This is the operator playbook for running the stack safely in production.
 
 If you are new, start with `docs/START_HERE.md` and `docs/DAY1_DEPLOY_CHECKLIST.md` first.
 
+```mermaid
+flowchart TD
+  A[Deploy/Operate] --> B[validate_env_secrets]
+  B --> C[migration_gate]
+  C --> D[deploy_with_smoke]
+  D --> E{Smoke pass?}
+  E -->|Yes| F[Record good state]
+  E -->|No| G[Rollback hook / triage]
+  G --> H[system_doctor + logs]
+```
+
 ## Working directories
 
 - Repo root (server): `/srv/lms/app`
@@ -114,6 +125,35 @@ When running behind Caddy on a real domain, use these defaults to avoid false ra
 - Retention timer:
   - Enable the `classhub-retention.timer` unit so submission/event cleanup runs automatically.
   - Timer setup commands are in [Automate retention + orphan cleanup](#automate-retention--orphan-cleanup).
+- Teacher/admin proxy armor:
+  - Optional IP allowlist for `/admin*` + `/teach*`:
+    - `CADDY_STAFF_IP_ALLOWLIST_V4`
+    - `CADDY_STAFF_IP_ALLOWLIST_V6`
+  - Optional extra basic-auth gate for `/admin*`:
+    - `CADDY_ADMIN_BASIC_AUTH_ENABLED=1`
+    - `CADDY_ADMIN_BASIC_AUTH_USER`
+    - `CADDY_ADMIN_BASIC_AUTH_HASH`
+
+## Incident degradation modes
+
+Use `CLASSHUB_SITE_MODE` in `compose/.env`, then redeploy:
+
+- `normal`
+- `read-only`
+- `join-only`
+- `maintenance`
+
+Example:
+
+```bash
+cd /srv/lms/app
+sed -i.bak 's/^CLASSHUB_SITE_MODE=.*/CLASSHUB_SITE_MODE=join-only/' compose/.env
+bash scripts/deploy_with_smoke.sh
+```
+
+Optional status message shown to users on blocked routes:
+
+- `CLASSHUB_SITE_MODE_MESSAGE`
 
 ## Health and logs
 

@@ -314,10 +314,10 @@ Historical implementation logs and superseded decisions are archived by month in
 
 **Current decision:**
 - Internal services remain private by default (Postgres/Redis internal network only; Ollama/MinIO host bindings are localhost-only).
-- Caddy explicitly sets forwarded IP/proto headers before proxying to Django.
+- Caddy uses default reverse-proxy forwarded headers for Django client IP/proto awareness.
 - Proxy-header trust is explicit opt-in (`REQUEST_SAFETY_TRUST_PROXY_HEADERS=0` by default).
 - Caddy enforces request-body limits per upstream (`CADDY_CLASSHUB_MAX_BODY`, `CADDY_HELPER_MAX_BODY`).
-- Class Hub emits a report-only CSP baseline by default in production; `DJANGO_CSP_REPORT_ONLY_POLICY` can override/tune it.
+- Class Hub and Helper emit enforced + report-only CSP baselines by default in production; `DJANGO_CSP_POLICY` and `DJANGO_CSP_REPORT_ONLY_POLICY` can override/tune them.
 - Both Django services reject weak/default secret keys when `DJANGO_DEBUG=0`.
 - Deploy flow includes automated `.env` validation via `scripts/validate_env_secrets.sh`.
 - Security headers and HTTPS controls are enabled in production through explicit env knobs (`DJANGO_SECURE_*`).
@@ -439,3 +439,24 @@ Historical implementation logs and superseded decisions are archived by month in
 - Limits shoulder-surfing exposure for return codes during classroom use.
 - Preserves classroom availability during transient cache issues.
 - Keeps release bundles safer and reproducible across local and CI workflows.
+
+## Public-domain hardening pass (CSP enforcement, proxy armor, degradation modes)
+
+**Current decision:**
+- Class Hub and Helper now support enforced CSP via `DJANGO_CSP_POLICY` while still emitting report-only CSP via `DJANGO_CSP_REPORT_ONLY_POLICY`.
+- Security headers are attached consistently by middleware (`Permissions-Policy`, `Referrer-Policy`, `X-Frame-Options`, plus CSP headers).
+- Caddy templates now support optional teacher/admin edge armor:
+  - IP allowlist for `/admin*` and `/teach*` via `CADDY_STAFF_IP_ALLOWLIST_V4`/`CADDY_STAFF_IP_ALLOWLIST_V6`
+  - optional extra basic-auth gate for `/admin*` via `CADDY_ADMIN_BASIC_AUTH_*`
+- Added a single operator-controlled degradation switch: `CLASSHUB_SITE_MODE` with modes:
+  - `normal`
+  - `read-only`
+  - `join-only`
+  - `maintenance`
+- Helper chat now respects degraded site modes (`join-only`, `maintenance`) and returns explicit machine-readable `site_mode_restricted` responses.
+
+**Why this remains active:**
+- Moves CSP from passive observation toward active browser-enforced protection.
+- Lowers clickjacking/browser-capability exposure with stable default headers.
+- Adds defense-in-depth for public `/admin` discovery pressure.
+- Gives operators a predictable, low-chaos incident posture without code edits.

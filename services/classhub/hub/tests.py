@@ -1382,7 +1382,7 @@ class LessonAssetDownloadTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn("attachment;", resp["Content-Disposition"])
         self.assertEqual(resp["X-Content-Type-Options"], "nosniff")
-        self.assertNotIn("Content-Security-Policy", resp)
+        self.assertIn("Content-Security-Policy", resp)
 
     def test_image_asset_allows_inline_with_sandbox_header(self):
         asset = LessonAsset.objects.create(
@@ -1412,15 +1412,80 @@ class LessonAssetDownloadTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn("attachment;", resp["Content-Disposition"])
         self.assertEqual(resp["X-Content-Type-Options"], "nosniff")
-        self.assertNotIn("Content-Security-Policy", resp)
+        self.assertIn("Content-Security-Policy", resp)
 
 
 class ClassHubSecurityHeaderTests(TestCase):
-    @override_settings(CSP_REPORT_ONLY_POLICY="default-src 'self'")
-    def test_healthz_sets_csp_report_only_header_when_configured(self):
+    @override_settings(
+        CSP_POLICY="default-src 'self'",
+        CSP_REPORT_ONLY_POLICY="default-src 'self'; report-uri /__csp-report__",
+        PERMISSIONS_POLICY="camera=(), microphone=()",
+        SECURITY_REFERRER_POLICY="strict-origin-when-cross-origin",
+        X_FRAME_OPTIONS="DENY",
+    )
+    def test_healthz_sets_security_headers(self):
         resp = self.client.get("/healthz")
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp["Content-Security-Policy-Report-Only"], "default-src 'self'")
+        self.assertEqual(resp["Content-Security-Policy"], "default-src 'self'")
+        self.assertEqual(resp["Content-Security-Policy-Report-Only"], "default-src 'self'; report-uri /__csp-report__")
+        self.assertEqual(resp["Permissions-Policy"], "camera=(), microphone=()")
+        self.assertEqual(resp["Referrer-Policy"], "strict-origin-when-cross-origin")
+        self.assertEqual(resp["X-Frame-Options"], "DENY")
+
+
+class ClassHubSiteModeTests(TestCase):
+    def setUp(self):
+        self.classroom = Class.objects.create(name="Mode Class", join_code="MODE1234")
+        self.module = Module.objects.create(classroom=self.classroom, title="Session 1", order_index=0)
+        self.upload = Material.objects.create(
+            module=self.module,
+            title="Upload",
+            type=Material.TYPE_UPLOAD,
+            accepted_extensions=".sb3",
+            max_upload_mb=50,
+            order_index=0,
+        )
+        self.student = StudentIdentity.objects.create(classroom=self.classroom, display_name="Ada")
+
+    def _login_student(self):
+        session = self.client.session
+        session["student_id"] = self.student.id
+        session["class_id"] = self.classroom.id
+        session.save()
+
+    @override_settings(SITE_MODE="read-only")
+    def test_read_only_blocks_submission_upload(self):
+        self._login_student()
+        resp = self.client.post(
+            f"/material/{self.upload.id}/upload",
+            {"file": SimpleUploadedFile("project.sb3", _sample_sb3_bytes())},
+        )
+        self.assertEqual(resp.status_code, 503)
+        self.assertContains(resp, "read-only mode", status_code=503)
+        self.assertEqual(resp["Cache-Control"], "no-store")
+
+    @override_settings(SITE_MODE="join-only")
+    def test_join_only_allows_join_endpoint(self):
+        resp = self.client.post(
+            "/join",
+            data=json.dumps({"class_code": self.classroom.join_code, "display_name": "New Student"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json().get("ok"))
+
+    @override_settings(SITE_MODE="join-only")
+    def test_join_only_blocks_teacher_portal_route(self):
+        resp = self.client.get("/teach")
+        self.assertEqual(resp.status_code, 503)
+        self.assertContains(resp, "join-only mode", status_code=503)
+
+    @override_settings(SITE_MODE="maintenance")
+    def test_maintenance_blocks_student_home(self):
+        self._login_student()
+        resp = self.client.get("/student")
+        self.assertEqual(resp.status_code, 503)
+        self.assertContains(resp, "maintenance mode", status_code=503)
 
 
 class InternalHelperEventEndpointTests(TestCase):

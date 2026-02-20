@@ -115,6 +115,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django_otp.middleware.OTPMiddleware",
     "config.middleware.TeacherOTPRequiredMiddleware",
+    "config.middleware.SiteModeMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     # StudentSessionMiddleware relies on sessions.
@@ -168,7 +169,7 @@ TIME_ZONE = env("DJANGO_TIME_ZONE", default="America/Chicago").strip() or "Ameri
 USE_I18N = True
 USE_TZ = True
 
-_DEFAULT_CSP_REPORT_ONLY_POLICY = (
+_DEFAULT_CSP_POLICY = (
     "default-src 'self'; "
     "base-uri 'self'; "
     "object-src 'none'; "
@@ -179,6 +180,13 @@ _DEFAULT_CSP_REPORT_ONLY_POLICY = (
     "style-src 'self' 'unsafe-inline'; "
     "script-src 'self' 'unsafe-inline'; "
     "connect-src 'self' https:;"
+)
+_DEFAULT_PERMISSIONS_POLICY = (
+    "accelerometer=(), autoplay=(), camera=(), clipboard-read=(), "
+    "clipboard-write=(self), display-capture=(), encrypted-media=(), "
+    "fullscreen=(self), geolocation=(), gyroscope=(), magnetometer=(), "
+    "microphone=(), midi=(), payment=(), publickey-credentials-get=(), "
+    "usb=(), xr-spatial-tracking=()"
 )
 
 STATIC_URL = "/static/"
@@ -245,10 +253,30 @@ REQUEST_SAFETY_XFF_INDEX = env.int("REQUEST_SAFETY_XFF_INDEX", default=0)
 CLASSHUB_INTERNAL_EVENTS_TOKEN = env("CLASSHUB_INTERNAL_EVENTS_TOKEN", default="").strip()
 ADMIN_2FA_REQUIRED = env.bool("DJANGO_ADMIN_2FA_REQUIRED", default=True)
 TEACHER_2FA_REQUIRED = env.bool("DJANGO_TEACHER_2FA_REQUIRED", default=True)
+CSP_POLICY = env(
+    "DJANGO_CSP_POLICY",
+    default=("" if DEBUG else _DEFAULT_CSP_POLICY),
+).strip()
 CSP_REPORT_ONLY_POLICY = env(
     "DJANGO_CSP_REPORT_ONLY_POLICY",
-    default=("" if DEBUG else _DEFAULT_CSP_REPORT_ONLY_POLICY),
+    default=("" if DEBUG else _DEFAULT_CSP_POLICY),
 ).strip()
+PERMISSIONS_POLICY = env(
+    "DJANGO_PERMISSIONS_POLICY",
+    default=_DEFAULT_PERMISSIONS_POLICY,
+).strip()
+SECURITY_REFERRER_POLICY = (
+    env("DJANGO_SECURE_REFERRER_POLICY", default="strict-origin-when-cross-origin").strip()
+    or "strict-origin-when-cross-origin"
+)
+SITE_MODE = env("CLASSHUB_SITE_MODE", default="normal").strip().lower()
+if SITE_MODE in {"readonly", "read_only"}:
+    SITE_MODE = "read-only"
+if SITE_MODE in {"joinonly", "join_only"}:
+    SITE_MODE = "join-only"
+if SITE_MODE not in {"normal", "read-only", "join-only", "maintenance"}:
+    raise RuntimeError("CLASSHUB_SITE_MODE must be one of: normal, read-only, join-only, maintenance")
+SITE_MODE_MESSAGE = env("CLASSHUB_SITE_MODE_MESSAGE", default="").strip()
 
 # When behind Caddy, Django should respect forwarded proto for secure cookies.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
@@ -265,7 +293,4 @@ if not DEBUG:
     SECURE_HSTS_PRELOAD = env.bool("DJANGO_SECURE_HSTS_PRELOAD", default=False)
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = "DENY"
-    SECURE_REFERRER_POLICY = (
-        env("DJANGO_SECURE_REFERRER_POLICY", default="strict-origin-when-cross-origin").strip()
-        or "strict-origin-when-cross-origin"
-    )
+    SECURE_REFERRER_POLICY = SECURITY_REFERRER_POLICY

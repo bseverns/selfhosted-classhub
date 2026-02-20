@@ -9,6 +9,20 @@ Flow:
 3. classify symptom
 4. apply smallest reversible fix
 
+```mermaid
+flowchart TD
+  A[Incident] --> B[system_doctor --smoke-mode basic]
+  B --> C{First failing step}
+  C -->|healthz/helper| D[Check container health + logs]
+  C -->|TLS/domain| E[Check Caddy template + DNS]
+  C -->|auth/teach| F[Check teacher/admin session + OTP]
+  C -->|helper backend| G[Check Ollama/OpenAI config]
+  D --> H[Apply smallest fix]
+  E --> H
+  F --> H
+  G --> H
+```
+
 ## 3-minute baseline
 
 ```bash

@@ -150,4 +150,30 @@ if [[ "${CADDYFILE_TEMPLATE}" == "Caddyfile.domain.assets" ]]; then
   fi
 fi
 
+CADDY_ADMIN_BASIC_AUTH_ENABLED="$(env_file_value CADDY_ADMIN_BASIC_AUTH_ENABLED)"
+CADDY_ADMIN_BASIC_AUTH_ENABLED="${CADDY_ADMIN_BASIC_AUTH_ENABLED:-0}"
+if [[ "${CADDY_ADMIN_BASIC_AUTH_ENABLED}" != "0" && "${CADDY_ADMIN_BASIC_AUTH_ENABLED}" != "1" ]]; then
+  fail "CADDY_ADMIN_BASIC_AUTH_ENABLED must be 0 or 1"
+fi
+if [[ "${CADDY_ADMIN_BASIC_AUTH_ENABLED}" == "1" ]]; then
+  require_nonempty "CADDY_ADMIN_BASIC_AUTH_USER"
+  require_nonempty "CADDY_ADMIN_BASIC_AUTH_HASH"
+  if contains_icase "$(env_file_value CADDY_ADMIN_BASIC_AUTH_USER)" "disabled-admin"; then
+    fail "CADDY_ADMIN_BASIC_AUTH_USER must be changed from default when basic auth is enabled"
+  fi
+  if [[ "$(env_file_value CADDY_ADMIN_BASIC_AUTH_HASH)" != \$2* ]]; then
+    fail "CADDY_ADMIN_BASIC_AUTH_HASH should be a bcrypt hash (starts with '$2')"
+  fi
+fi
+
+SITE_MODE_VAL="$(env_file_value CLASSHUB_SITE_MODE)"
+SITE_MODE_VAL="${SITE_MODE_VAL:-normal}"
+case "${SITE_MODE_VAL}" in
+  normal|read-only|join-only|maintenance|readonly|read_only|joinonly|join_only)
+    ;;
+  *)
+    fail "CLASSHUB_SITE_MODE must be one of normal, read-only, join-only, maintenance"
+    ;;
+esac
+
 echo "[env-check] OK"

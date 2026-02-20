@@ -8,6 +8,19 @@ If you only do three things before production:
 2. require TLS and 2FA for admin + teacher users
 3. run `bash scripts/validate_env_secrets.sh`
 
+```mermaid
+flowchart LR
+  U[Users] --> C[Caddy edge]
+  C --> H1[Security headers]
+  C --> H2[Route armor<br/>/admin + /teach]
+  C --> A[Class Hub]
+  C --> B[Homework Helper]
+  A --> D[Django auth + OTP]
+  B --> E[Scope token + rate limits]
+  A --> F[(Postgres/Redis)]
+  B --> F
+```
+
 ## Security posture at a glance
 
 | Area | Current posture |
@@ -16,6 +29,7 @@ If you only do three things before production:
 | Teacher/admin auth | Django auth; OTP required by default for `/admin` and `/teach` |
 | Transport | Caddy at edge; HTTPS expected in production |
 | Service exposure | Postgres/Redis internal-only; Ollama/MinIO localhost-bound on host |
+| Browser hardening | Enforced CSP + report-only CSP + Permissions-Policy + Referrer-Policy + frame protections |
 | Helper scope protection | Student helper calls require signed `scope_token` |
 | Upload access | Not public `/media`; downloads are permission-checked views |
 | Auditing | Staff mutations logged as immutable `AuditEvent` rows |
@@ -71,6 +85,19 @@ docker compose exec classhub_web python manage.py bootstrap_admin_otp --username
 - Proxy header trust is explicit opt-in:
   - `REQUEST_SAFETY_TRUST_PROXY_HEADERS=0` by default
   - set to `1` only when your first-hop proxy is trusted and rewrites `X-Forwarded-*`.
+
+## Proxy armor for teacher/admin routes
+
+Optional Caddy controls for `/admin*` and `/teach*`:
+
+- IP allowlist:
+  - `CADDY_STAFF_IP_ALLOWLIST_V4` / `CADDY_STAFF_IP_ALLOWLIST_V6` (defaults allow all)
+- Extra `/admin*` basic-auth gate:
+  - `CADDY_ADMIN_BASIC_AUTH_ENABLED=1`
+  - `CADDY_ADMIN_BASIC_AUTH_USER`
+  - `CADDY_ADMIN_BASIC_AUTH_HASH` (bcrypt hash)
+
+These controls are additive to Django auth + OTP.
 
 ## Data handling and retention
 
@@ -130,26 +157,46 @@ Enable command-based scanning (for example ClamAV):
 - `CLASSHUB_UPLOAD_SCAN_COMMAND` (example: `clamscan --no-summary --stdout`)
 - `CLASSHUB_UPLOAD_SCAN_FAIL_CLOSED=1` to block uploads on scanner errors/timeouts
 
-## Content security policy rollout
+## CSP and browser security headers
 
-With `DJANGO_DEBUG=0`, Class Hub now ships with a default report-only CSP baseline.
-Set `DJANGO_CSP_REPORT_ONLY_POLICY` to override it (or to empty string to disable).
+Class Hub and Homework Helper attach these headers by default:
 
-Suggested rollout:
+- `Content-Security-Policy` (enforced)
+- `Content-Security-Policy-Report-Only` (for visibility while tuning)
+- `Permissions-Policy`
+- `Referrer-Policy`
+- `X-Frame-Options`
 
-1. Start in report-only mode.
-2. Review violations.
-3. Tighten directives iteratively.
-4. Enforce only after classroom pages are clean.
+Primary knobs:
 
-Starter override example:
+- `DJANGO_CSP_POLICY`
+- `DJANGO_CSP_REPORT_ONLY_POLICY`
+- `DJANGO_PERMISSIONS_POLICY`
+- `DJANGO_SECURE_REFERRER_POLICY`
 
-`DJANGO_CSP_REPORT_ONLY_POLICY=default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'`
+Rollout strategy:
 
-If you use:
+1. Keep report-only enabled while reviewing violations.
+2. Tighten directives (especially `script-src`, `style-src`, `connect-src`, `frame-src`).
+3. Keep enforced + report-only in parallel until violation noise stabilizes.
 
-- YouTube embeds: include `frame-src https://www.youtube.com https://www.youtube-nocookie.com`
-- Separate asset host: include your asset origin in `img-src`, `media-src`, and `connect-src` as needed (for example `https://assets.creatempls.org`)
+Embed notes:
+
+- YouTube embeds require `frame-src https://www.youtube.com https://www.youtube-nocookie.com`.
+- Separate asset origins require matching updates in `img-src`, `media-src`, and `connect-src`.
+
+## Site degradation modes
+
+`CLASSHUB_SITE_MODE` can narrow behavior during incidents:
+
+- `normal`
+- `read-only` (uploads/write actions blocked)
+- `join-only` (student entry paths available, heavy routes paused)
+- `maintenance` (student-facing routes paused)
+
+Optional operator message override:
+
+- `CLASSHUB_SITE_MODE_MESSAGE`
 
 ## Future hardening candidates
 

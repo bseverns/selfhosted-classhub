@@ -4,6 +4,14 @@ If you are not writing code, start here.
 
 You do not need to read every docs file. For normal classroom use, this page plus `docs/TEACHER_PORTAL.md` is enough.
 
+```mermaid
+flowchart LR
+  A[Before class<br/>5-min check] --> B[During class<br/>Teach + monitor]
+  B --> C[End of class<br/>Closeout]
+  C --> D[If issues<br/>Troubleshooting]
+  D --> A
+```
+
 ## What this system does
 
 - Students join with a class code and display name.

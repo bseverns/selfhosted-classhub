@@ -568,8 +568,36 @@ class HelperAdminAccessTests(TestCase):
 
 
 class HelperSecurityHeaderTests(TestCase):
-    @override_settings(CSP_REPORT_ONLY_POLICY="default-src 'self'")
-    def test_healthz_sets_csp_report_only_header_when_configured(self):
+    @override_settings(
+        CSP_POLICY="default-src 'self'",
+        CSP_REPORT_ONLY_POLICY="default-src 'self'; report-uri /__csp-report__",
+        PERMISSIONS_POLICY="camera=(), microphone=()",
+        SECURITY_REFERRER_POLICY="strict-origin-when-cross-origin",
+        X_FRAME_OPTIONS="DENY",
+    )
+    def test_healthz_sets_security_headers(self):
         resp = self.client.get("/helper/healthz")
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp["Content-Security-Policy-Report-Only"], "default-src 'self'")
+        self.assertEqual(resp["Content-Security-Policy"], "default-src 'self'")
+        self.assertEqual(resp["Content-Security-Policy-Report-Only"], "default-src 'self'; report-uri /__csp-report__")
+        self.assertEqual(resp["Permissions-Policy"], "camera=(), microphone=()")
+        self.assertEqual(resp["Referrer-Policy"], "strict-origin-when-cross-origin")
+        self.assertEqual(resp["X-Frame-Options"], "DENY")
+
+
+class HelperSiteModeTests(TestCase):
+    @override_settings(SITE_MODE="join-only")
+    def test_join_only_blocks_chat_endpoint(self):
+        resp = self.client.post(
+            "/helper/chat",
+            data=json.dumps({"message": "help"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 503)
+        self.assertEqual(resp.json().get("error"), "site_mode_restricted")
+        self.assertEqual(resp.json().get("site_mode"), "join-only")
+
+    @override_settings(SITE_MODE="maintenance")
+    def test_maintenance_still_allows_healthz(self):
+        resp = self.client.get("/helper/healthz")
+        self.assertEqual(resp.status_code, 200)

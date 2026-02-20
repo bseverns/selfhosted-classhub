@@ -5,6 +5,15 @@ This guide covers:
 - accessing the teacher portal
 - common day-to-day workflows
 
+```mermaid
+flowchart TD
+  A[Superuser creates teacher] --> B[Invite link: /teach/2fa/setup]
+  B --> C[Teacher enrolls OTP]
+  C --> D[Teacher opens /teach]
+  D --> E[Lesson tracker + class dashboard]
+  E --> F[Review uploads / manage releases]
+```
+
 ## Access model
 
 - Student access: class code + display name.

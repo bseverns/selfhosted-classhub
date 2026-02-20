@@ -2,6 +2,16 @@
 
 Use this when creating a shareable source archive.
 
+```mermaid
+flowchart LR
+  A[Source tree] --> B[make_release_zip.sh]
+  B --> C[dist/*.zip]
+  C --> D[lint_release_artifact.py]
+  D --> E{Forbidden files present?}
+  E -->|No| F[Publish/share artifact]
+  E -->|Yes| G[Fix excludes and rebuild]
+```
+
 ## Build release zip
 
 ```bash

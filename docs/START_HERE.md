@@ -2,6 +2,18 @@
 
 Use this page to pick one path. Do not read everything.
 
+```mermaid
+flowchart TD
+  A[Start Here] --> B{Your role}
+  B -->|Teacher/Staff| C[NON_DEVELOPER_GUIDE]
+  C --> D[TEACHER_PORTAL]
+  B -->|Operator/Admin| E[DAY1_DEPLOY_CHECKLIST]
+  E --> F[RUNBOOK]
+  B -->|Developer| G[DEVELOPMENT]
+  G --> H[ARCHITECTURE]
+  H --> I[DECISIONS + OPENAI_HELPER]
+```
+
 ## Fast path by role
 
 ### I am a teacher or school staff member (non-developer)

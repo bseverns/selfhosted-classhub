@@ -8,6 +8,20 @@ The helper service is a Django app that exposes:
 By default, the helper is wired to a local LLM server (Ollama) for self-hosted reliability and predictable costs.
 OpenAI is supported as a production-ready backend via the **Responses API** and can be enabled with env switches.
 
+```mermaid
+flowchart TD
+  A[POST /helper/chat] --> B[Auth + scope token checks]
+  B --> C[Rate limit + queue slot]
+  C --> D{Backend}
+  D -->|ollama| E[Local Ollama API]
+  D -->|openai| F[OpenAI Responses API]
+  D -->|mock| G[Deterministic test response]
+  E --> H[Policy-shaped answer]
+  F --> H
+  G --> H
+  H --> I[JSON response + request_id]
+```
+
 ## Backend selection
 
 Set the backend in `compose/.env`:

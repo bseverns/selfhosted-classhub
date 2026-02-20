@@ -2,6 +2,17 @@
 
 See `scripts/bootstrap_day1.sh` for an automated starter.
 
+```mermaid
+flowchart TD
+  A[Provision server] --> B[Copy compose/.env]
+  B --> C[Set secrets + domain vars]
+  C --> D[validate_env_secrets]
+  D --> E[migration_gate]
+  E --> F[deploy_with_smoke]
+  F --> G[system_doctor]
+  G --> H[Verify /teach + /healthz]
+```
+
 ## Essentials
 - Create non-root deploy user
 - Enable firewall (SSH/80/443 only)

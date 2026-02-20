@@ -12,6 +12,17 @@ For guided onboarding labs, use `docs/LEARNING_PATHS.md`.
 - Teachers use staff accounts and open the teacher portal at `/teach`.
 - Admins use Django admin at `/admin/`.
 
+```mermaid
+flowchart TD
+  U[Student / Teacher / Admin] --> C[Caddy]
+  C -->|/helper/*| H[Homework Helper]
+  C -->|all other routes| W[Class Hub]
+  W --> P[(Postgres)]
+  H --> P
+  W --> R[(Redis)]
+  H --> R
+```
+
 ## Where to go
 
 Use common route list in `docs/START_HERE.md#common-urls`.

@@ -2,6 +2,16 @@
 
 This is a quick checklist to rebuild the server from scratch after a total loss.
 
+```mermaid
+flowchart TD
+  A[Provision fresh server] --> B[Clone repo]
+  B --> C[Restore compose/.env secrets]
+  C --> D[Restore Postgres/uploads/MinIO backups]
+  D --> E[docker compose up -d --build]
+  E --> F[migrate + smoke checks]
+  F --> G[Verify /teach and student join]
+```
+
 ## 1) Provision a fresh server
 
 - Ubuntu 24.04+ recommended.

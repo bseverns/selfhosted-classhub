@@ -7,6 +7,16 @@ if it exists, which enables hot reload for Django code and templates.
 Docs are first-class in this repo. If you change behavior, update docs in the
 same branch. Start with:
 
+```mermaid
+flowchart LR
+  A[Edit code/content] --> B[docker compose up -d]
+  B --> C[Autoreload / runserver]
+  C --> D[Quick checks]
+  D --> E[system_doctor --smoke-mode golden]
+  E --> F[Update docs + decisions]
+  F --> G[Open PR]
+```
+
 - `docs/README.md` (documentation contract)
 - `docs/START_HERE.md` (navigation map)
 - `docs/TEACHING_PLAYBOOK.md` (teaching-quality writing standards)

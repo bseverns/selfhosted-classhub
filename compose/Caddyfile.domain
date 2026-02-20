@@ -1,6 +1,31 @@
 {$DOMAIN} {
   encode gzip
 
+  header {
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "{$CADDY_REFERRER_POLICY:strict-origin-when-cross-origin}"
+    Permissions-Policy "{$CADDY_PERMISSIONS_POLICY:accelerometer=(), autoplay=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()}"
+    X-Frame-Options "{$CADDY_X_FRAME_OPTIONS:DENY}"
+  }
+
+  @staff_not_allowlisted {
+    path /admin* /teach*
+    not remote_ip {$CADDY_STAFF_IP_ALLOWLIST_V4:0.0.0.0/0} {$CADDY_STAFF_IP_ALLOWLIST_V6:::/0}
+  }
+  respond @staff_not_allowlisted "forbidden" 403
+
+  @admin_routes path /admin*
+  @admin_basic_auth_enabled expression `{env.CADDY_ADMIN_BASIC_AUTH_ENABLED} == "1"`
+  handle @admin_routes {
+    handle @admin_basic_auth_enabled {
+      basic_auth {
+        {$CADDY_ADMIN_BASIC_AUTH_USER:disabled-admin} {$CADDY_ADMIN_BASIC_AUTH_HASH:$2a$14$Zkx19XLiW6VYouLHR5NmfOFU0z2GTNmpkT/5qqR7hx4IjWJPDhjvG}
+      }
+      reverse_proxy classhub_web:8000
+    }
+    reverse_proxy classhub_web:8000
+  }
+
   handle_path /healthz {
     respond "ok" 200
   }
@@ -10,12 +35,7 @@
     request_body {
       max_size {$CADDY_HELPER_MAX_BODY:1MB}
     }
-    reverse_proxy helper_web:8000 {
-      header_up X-Forwarded-For {remote_host}
-      header_up X-Real-IP {remote_host}
-      header_up X-Forwarded-Proto {scheme}
-      header_up X-Forwarded-Host {host}
-    }
+    reverse_proxy helper_web:8000
   }
 
   # Class Hub
@@ -23,11 +43,6 @@
     request_body {
       max_size {$CADDY_CLASSHUB_MAX_BODY:650MB}
     }
-    reverse_proxy classhub_web:8000 {
-      header_up X-Forwarded-For {remote_host}
-      header_up X-Real-IP {remote_host}
-      header_up X-Forwarded-Proto {scheme}
-      header_up X-Forwarded-Host {host}
-    }
+    reverse_proxy classhub_web:8000
   }
 }
