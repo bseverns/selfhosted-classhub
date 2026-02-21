@@ -1,20 +1,43 @@
-# Python
+# Python build/cache
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
 *.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtualenvs
 .venv/
 venv/
 
-# Django
+# Django/runtime state
 *.sqlite3
-staticfiles/
 media/
+staticfiles/
+data/
+.deploy/
+logs/
+backups/
+dist/
 
-# Env
+# Local env/secrets (keep templates tracked)
 .env
+.env.*
+!.env.example
 compose/.env
+compose/.env.local
+compose/.env.local.*
+compose/.env.bak*
+compose/.env.backup*
+compose/.env.*.bak*
+compose/.env.*
+!compose/.env.example
+compose/docker-compose.override.yml.disabled
 
-# OS
+# OS/editor noise
 .DS_Store
+__MACOSX/
